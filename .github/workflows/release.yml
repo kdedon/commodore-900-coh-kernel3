@@ -47,9 +47,13 @@ jobs:
           v=$(sh os/hostbuild/version.sh)
           echo "V=$v" >> "$GITHUB_ENV"
           echo "releasing $v"
+          # A release is exactly a tag: digits and dots, nothing else.
+          # Match on what a release IS, not on the shapes of what it is not --
+          # 0.0.0-g<commit> has one hyphen and slipped a *-*-g* pattern.
           case $v in
-          *-dirty|*-*-g*)
-            echo "refusing: not built at a tag ($v)" >&2; exit 1 ;;
+          *[!0-9.]*|*..*|.*|*.)
+            echo "refusing to release \`$v': not built at a v<x.y.z> tag" >&2
+            exit 1 ;;
           esac
 
       - name: The compiler
