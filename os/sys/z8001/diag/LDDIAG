@@ -1,0 +1,5 @@
+ld -i -o WDdiag \
+	-R 0x30000000 \
+	-u putchar_ -u debflag_ -u timeout_ \
+	tmd.o con.o twds.o $* \
+	../libcmdr.a ../libcoh.a -lc

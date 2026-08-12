@@ -1,0 +1,18 @@
+sys/z8001/drv/ATTIC -- not built, not linked, not a source of truth.
+
+Nothing here is compiled.  hostbuild/link-kernel.sh links exactly one disk
+driver, ../wd.c; these are earlier or alternate revisions of it that came
+across with the donor tree, kept as history only.
+
+The partition table is the trap.  Each file carries its own hand-typed
+wdbtab[], and the tables disagree with each other and with the machine.
+The live table is generated into <wdbtab.h> by hostbuild/dist.py from
+os/dist/media/*.media, and ../wd.c includes it.  For the real layout read
+os/dist/media/*.media or the generated hostbuild/build/gen/wdbtab.h,
+never a table in here.
+
+wd.old		WD + Commodore floppy controller, April 12 1985; 20 MB table
+wd.c.old	WD hard disk only, March 18 1985; the oldest copy here
+wd8.c		alternate controller build, 10336-block partitions (20 MB)
+wd8atasi.c	same, retabled for the Atasi 42 MB drive; 20944-block partitions
+junkwd.c	January 29 1985, named "junk" by the donor; 5168-block partitions

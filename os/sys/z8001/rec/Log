@@ -1,0 +1,11 @@
+../CC -I. v0.c
+../CC -I. mm.c
+/lib/cpp -E -DNLD -UDDT mmas.s > mmas.i
+ as -go mmas.o mmas.i
+rm mmas.i
+../CC -I. kb.c
+51: ./kbchar.h: Warning: macro K1  redefined
+../CC -DCCE=1 -I. kbtab.c
+51: ./kbchar.h: Warning: macro K1  redefined
+../CC -I. kv.c
+done

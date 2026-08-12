@@ -1,0 +1,52 @@
+# build -- link the kernel and its drivers against the toolchain this
+# repository floats on.
+#
+# `ld -k' bakes the kernel's absolute addresses into every loadable driver, so
+# the two are one artifact: a kernel that relinks and drivers that were not
+# rebuilt is the failure this catches.  Both goals are named for that reason.
+#
+# Nothing here boots.  Whether the kernel RUNS is the dist repository's
+# question, because that is where an image is packed.
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  link:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: kernel3, fetch-depth: 0 }
+      - uses: actions/checkout@v4
+        with:
+          repository: kdedon/commodore-900-toolchain
+          path: toolchain
+          token: ${{ secrets.C900_CI_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: kdedon/commodore-900-kboot
+          path: kboot
+          token: ${{ secrets.C900_CI_TOKEN || github.token }}
+
+      - name: The compiler
+        working-directory: toolchain
+        run: make all
+
+      # Set, never searched: a job that depended on directory adjacency breaks
+      # the first time a runner image moves its checkouts.  The search itself
+      # is tested by resolver-isolation.yml, alone and deliberately.
+      - name: Kernel and drivers
+        working-directory: kernel3
+        env:
+          C900_TOOLCHAIN: ${{ github.workspace }}/toolchain
+          C900_KBOOT: ${{ github.workspace }}/kboot
+        run: make kernel drivers
+
+      # fetch-depth: 0 above is what makes this answerable -- version.sh reads
+      # the tag, and a shallow clone has none.
+      - name: The build can name its own version
+        working-directory: kernel3
+        run: sh os/hostbuild/version.sh

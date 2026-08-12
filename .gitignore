@@ -1,0 +1,32 @@
+# Build artifacts.  Every pattern here is ANCHORED (leading `/', or a path
+# with a slash in it): an unanchored pattern matches at every depth, and this
+# tree's source directories are not where that risk is worth taking.
+#
+# Source and build scripts only get committed here -- never a binary.  A
+# compiled kernel, a linked driver, or an intermediate .o/.z0/.z1/.scr is a
+# build artifact of a toolchain this repository depends on, not something
+# this repository can review or diff meaningfully in a pull request.
+
+# link-kernel.sh's published output and its private working directory
+# (kobj.<pid>, renamed into kobj/ on success -- see the script's own note).
+/os/hostbuild/kobj/
+/os/hostbuild/kobj.*/
+
+# build-drivers.sh / build-hostfs.sh / pack-kernel.sh output, and the variant
+# marker link-kernel.sh reads to tell a KTTY/KMEDIA/KMOUSE switch from a
+# no-op re-run.
+/os/hostbuild/build/
+
+# Per-script build logs.
+/os/hostbuild/logs/
+
+# The dependency checkouts `make deps' places beside this repository (see
+# DEPS and mk/deps.sh) -- they are their own repositories, not this one's.
+/deps/
+/repos/
+
+# Host detritus.
+*~
+.DS_Store
+__pycache__/
+*.pyc

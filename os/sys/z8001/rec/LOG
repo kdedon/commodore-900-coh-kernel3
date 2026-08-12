@@ -1,0 +1,3 @@
+Sun Sep  8 14:57:00 1985 EDT
+../CC -I. v0.c
+21: /usr/sys/z8001/h/ktty.h: cannot open include file sys/clist.h

@@ -1,0 +1,6 @@
+Stale coh.286 revisions NOT part of the 3.2.1b kernel link (verified against
+us/Makefile): exec.o builds from the MD tree (i286/exec.c, s_faddr-based;
+the Z8001 kernel has its own MD exec), and swap.o is not in the DOTDOT
+link list at all (/dev/swap is linked to /dev/null in us/config.mwc).  Both
+files here still use the older s_mbase/s_dbase seg layout that predates the
+3.2.1b include/sys/seg.h -- kept for reference only.

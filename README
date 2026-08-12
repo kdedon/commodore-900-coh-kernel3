@@ -1,0 +1,49 @@
+commodore-900-coh-kernel3
+==========================
+
+The COHERENT 3-series kernel for the Commodore 900 (Zilog Z8001): the
+3.2-derived portable core plus the Z8001 machine layer (os/sys), the hi-res
+console driver (os/hrtty), the kernel-class headers, and the host build that
+links, tests and packages them.
+
+`kernel3` names a DERIVATION, not a product version: this source descends
+from the COHERENT 3.x line, as opposed to the separate 0.7-derived kernel
+that remains in commodore-900-coherent (src/kernel) pending its own decision.
+The two share no source and are not two versions of one codebase.
+
+Building
+--------
+
+    make deps        # clone commodore-900-toolchain and commodore-900-kboot
+                      # beside this repository (see DEPS)
+    make kernel       # link os/hostbuild/kobj/kernel.out
+    make drivers      # the loadable console drivers, bound to that kernel
+    make kernel-dist  # the packaged deliverable (see os/hostbuild/pack-kernel.sh)
+    make kernel-headers
+    make check-stamps
+    make help
+
+`make deps` places the two checkouts DEPS names as siblings of this
+repository (or inside a `repos/` directory beside it); set C900_TOOLCHAIN or
+C900_KBOOT to point at checkouts elsewhere. See DEPS for what each edge is
+for and why there is no `emu` or `lexicon` row here.
+
+What this repository does not contain
+--------------------------------------
+
+No image assembly, no media/partition descriptors, and no userland: this
+repository links a kernel and its drivers, and packages them for a consumer
+(the dist repository) to stage onto a disk alongside a userland package. It
+depends on commodore-900-toolchain for the Z8001 compiler, assembler and
+linker, and on commodore-900-kboot for the loader-to-kernel handoff header
+(include/bootinfo.h) it compiles in.
+
+History
+-------
+
+Split from commodore-900-coherent by TASK-288, with git-filter-repo, so
+`git log --follow` on a file under os/sys or os/hrtty reaches back through
+that repository's history rather than starting fresh.
+
+See LICENSE and NOTICE for what this source is and who holds copyright over
+it.

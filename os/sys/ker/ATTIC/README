@@ -1,0 +1,3 @@
+0.7.3 swap.c (s_mbase contract) -- not linked into the kernel (swap.o is
+absent from the 3.2 DOTDOT list too; /dev/swap is /dev/null).  Kept for
+reference when swapping is brought back (with the 3.2 ATTIC swap.c).

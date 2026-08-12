@@ -1,0 +1,9 @@
+for i
+do
+echo $i
+if cmp -s $i /usr/src/hrtty/src/$i
+then
+else
+ls -l $i
+fi
+done

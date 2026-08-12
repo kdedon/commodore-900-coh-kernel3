@@ -1,0 +1,109 @@
+# toolchain.mk -- resolve the Z8001 cross toolchain, for makefiles.
+# The shell equivalent, and the long-form rationale, is toolchain.sh beside it.
+#
+# The compiler, assembler and linker are not in this repository: they live in
+# `commodore-900-toolchain', which has three consumers -- COHERENT, CP/M-8000
+# and kboot -- and belongs to none of them.  This tree consumes one of two
+# shapes of it: a source CHECKOUT, or an unpacked RELEASE archive.
+#
+#   $(C900_TOOLCHAIN)  the toolchain.  Unset, mk/deps.sh searches -- deps/ for
+#                      the pinned release, then a checkout beside this
+#                      repository, then one inside a `repos/' staging
+#                      directory.  Override it (on the command line or in the
+#                      environment) to build against something else; a value
+#                      that does not resolve is refused as itself, not quietly
+#                      re-searched.  The search is in mk/deps.sh and nowhere
+#                      else, so `make deps', this file and toolchain.sh cannot
+#                      answer the same question three different ways.
+#
+# Defines:
+#   $(TC)      the toolchain's host directory: ccz, the build-*.sh harnesses
+#              (checkout only), and build/ (cc0/cc1/cc2-z8001, as-z8001,
+#              ld-z8001, libc-z8001.a, curses, libm ...)
+#   $(TCB)     the build directory to READ artifacts out of, for the makefiles
+#              that only want the binaries: $(C900_TC_BUILD) when set,
+#              $(TC)/build otherwise.  The toolchain's own $C900_BUILD moves
+#              only the EMITTING side, so a lane that set it alone still had
+#              every consumer here reading the shared $(TC)/build and never
+#              seeing the private one; this is the reading half.  Set both, to
+#              the same directory, for a lane whose compiler is its own.  Which
+#              was chosen is REPORTED, like the shape.
+#   $(C900_TC_SHAPE)   `checkout' or `release X.Y.Z' -- WHICH of the two this
+#              build resolved.  A release archive carries a host/ view of its
+#              own bin/, so both shapes spell the parts identically and no
+#              consumer learns a second layout; but a binary archive has no
+#              build-*.sh and none of the libraries they build from this tree
+#              (curses, libm, libmisc), so the two are not interchangeable and
+#              the difference is REPORTED rather than left to be discovered.
+#
+# and exports $(COHERENT_OS), the reciprocal input: the toolchain builds itself
+# from its own sources alone, but a few of its harnesses build OS artifacts WITH
+# it (libc-z8001.a, libm, ccz's default include path) and take an OS tree as an
+# input.  See the toolchain's host/coherent-os.sh.
+C900_MKDIR := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+# $(C900_MKDIR) is os/hostbuild, so the resolver is two levels up.
+C900_DEPS := $(abspath $(C900_MKDIR)/../../mk/deps.sh)
+# Simply-expanded, and only when nothing named it: `?=' would make the variable
+# recursive and re-run the search at every mention of it.
+ifeq (,$(C900_TOOLCHAIN))
+C900_TOOLCHAIN := $(shell C900_TOOLCHAIN= sh $(C900_DEPS) toolchain)
+endif
+C900_TC_SHAPE := $(shell C900_TOOLCHAIN='$(C900_TOOLCHAIN)' sh $(C900_DEPS) -k toolchain)
+TC := $(C900_TOOLCHAIN)/host
+TCB := $(if $(C900_TC_BUILD),$(abspath $(C900_TC_BUILD)),$(TC)/build)
+# An empty shape is the "did not resolve" answer, whether nothing was found or
+# $(C900_TOOLCHAIN) named something that is neither shape.
+#
+# $(C900_TC_OPTIONAL) suppresses the refusal.  A caller sets it when the work it
+# is about to do compiles nothing -- packing an image of a system whose parts are
+# already built -- because a hard requirement here would make the compiler a
+# dependency of every operation in the tree, including ones that never invoke it.
+# It suppresses only the DIAGNOSIS: $(TC) is still empty, so any rule that does
+# reach for a compiler fails on the spot, loudly, at the command that wanted one.
+ifeq (,$(C900_TC_SHAPE))
+ifeq (,$(C900_TC_OPTIONAL))
+# deps.sh writes the refusal -- the variable, whether its own value was the only
+# thing tried, and every path -- straight to make's stderr; $(shell) captures
+# stdout, which in this mode is empty.  $(error) then stops, because a refusal
+# make prints and then carries on from is not a refusal.
+$(shell C900_TOOLCHAIN='$(C900_TOOLCHAIN)' sh $(C900_DEPS) -n toolchain '$(C900_TOOLCHAIN)')
+$(error no Z8001 toolchain: C900_TOOLCHAIN and the paths tried are listed above)
+endif
+endif
+COHERENT_OS := $(abspath $(C900_MKDIR)/..)
+# Once per build: this file is included by a dozen makefiles and by recursive
+# makes under them, and the exported flag is what keeps that one line.  stderr,
+# not $(info), so a target whose stdout is read by a script stays readable.
+ifeq (,$(C900_TC_REPORTED))
+ifneq (,$(C900_TC_SHAPE))
+$(shell echo "toolchain: $(C900_TC_SHAPE) at C900_TOOLCHAIN=$(C900_TOOLCHAIN)" >&2)
+# Beside it, and only when it is not the default: a non-default build directory
+# changes WHICH compiler ran as completely as a different toolchain does.
+ifneq (,$(C900_TC_BUILD))
+$(shell echo "toolchain: build dir C900_TC_BUILD=$(TCB) (not the shared $(TC)/build)" >&2)
+endif
+# The identity check, in the same guard and for the same reason as the report.
+# A build entering through a makefile must be refused on the same terms as one
+# entering through toolchain.sh, or the half that skips the check is the half
+# that ships the wrong object.  prov_tc_check writes its whole diagnosis to
+# stderr and prints nothing on stdout, so `ok' is the only thing captured and
+# an empty capture means it refused.
+#
+# Not for a run that compiles nothing.  $(C900_TC_OPTIONAL) is the caller's
+# statement that this one does not -- an info goal, or a dist built from a tree
+# somebody else compiled -- and what the check guards against is SHIPPING an
+# object built by a stale compiler.  A run that emits no object cannot, so
+# refusing it only means `make list-dists' fails because a lane elsewhere is
+# mid-rebuild of a compiler this run will never invoke.
+ifeq (,$(C900_TC_OPTIONAL))
+C900_TC_OK := $(shell . $(C900_MKDIR)/provenance.sh; \
+	prov_tc_check '$(TCB)' '$(COHERENT_OS)/hostbuild/build/.tcstamp' '$(C900_TC_SHAPE)' && echo ok)
+ifeq (,$(C900_TC_OK))
+$(error the toolchain identity check refused this build -- the diagnosis is above)
+endif
+endif
+C900_TC_REPORTED := 1
+endif
+endif
+export C900_TOOLCHAIN COHERENT_OS C900_TC_SHAPE C900_TC_REPORTED C900_TC_BUILD
+# end of toolchain.mk

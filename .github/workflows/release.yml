@@ -1,0 +1,85 @@
+# release -- cut the packages this repository is responsible for.
+#
+# Three, because they have three different consumers:
+#
+#   c900-kernel-v<V>          the bootable kernel, its loadable drivers, the
+#                             symbol table and check-stamps.sh.  For whoever
+#                             installs or packs a system.  Drivers and kernel
+#                             travel together on purpose: `ld -k' bakes the
+#                             kernel's absolute addresses into each driver, so
+#                             a driver is only valid with the kernel it names.
+#   c900-kernel-headers-v<V>  the 59 headers a kernel-side compile needs,
+#                             computed from the sources by kheaders.py.  For
+#                             whoever COMPILES against the kernel and has no
+#                             use for an image they cannot boot.
+#   c900-kernel-src-v<V>      the sources the two above were built from, which
+#                             is what the licence obligations attach to.
+#
+# The version comes from the tag being built, through os/hostbuild/version.sh
+# -- fetch-depth: 0 is what makes that answerable.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: kernel3, fetch-depth: 0 }
+      - uses: actions/checkout@v4
+        with:
+          repository: kdedon/commodore-900-toolchain
+          path: toolchain
+          token: ${{ secrets.C900_CI_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: kdedon/commodore-900-kboot
+          path: kboot
+          token: ${{ secrets.C900_CI_TOKEN || github.token }}
+
+      - name: The version being released
+        working-directory: kernel3
+        run: |
+          v=$(sh os/hostbuild/version.sh)
+          echo "V=$v" >> "$GITHUB_ENV"
+          echo "releasing $v"
+          case $v in
+          *-dirty|*-*-g*)
+            echo "refusing: not built at a tag ($v)" >&2; exit 1 ;;
+          esac
+
+      - name: The compiler
+        working-directory: toolchain
+        run: make all
+
+      - name: Kernel and drivers
+        working-directory: kernel3
+        env:
+          C900_TOOLCHAIN: ${{ github.workspace }}/toolchain
+          C900_KBOOT: ${{ github.workspace }}/kboot
+        run: make kernel drivers
+
+      - name: Pack the three
+        working-directory: kernel3
+        env:
+          C900_TOOLCHAIN: ${{ github.workspace }}/toolchain
+          C900_KBOOT: ${{ github.workspace }}/kboot
+        run: |
+          make kernel-dist
+          make kernel-headers-dist
+          git archive --format=tar.gz --prefix="c900-kernel-src-v$V/" \
+              -o "os/hostbuild/build/dist/c900-kernel-src-v$V.tar.gz" HEAD
+
+      - name: What was cut
+        working-directory: kernel3
+        run: ls -l os/hostbuild/build/dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: c900-kernel-${{ env.V }}
+          path: kernel3/os/hostbuild/build/dist/*.tar.gz
+          if-no-files-found: error

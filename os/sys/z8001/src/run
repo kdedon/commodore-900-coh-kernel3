@@ -1,0 +1,5 @@
+set -x
+: remove PARANOID when all is well !!!!
+/lib/cpp -E -DPARANOID -DNLD -UDDT md.s >/tmp/md.i
+/bin/as -go md.o /tmp/md.i
+rm -f /tmp/md.i

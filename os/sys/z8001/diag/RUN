@@ -1,0 +1,4 @@
+set -x
+/lib/cpp -E -DNLD -UDDT tmd.s >/tmp/tmd.i
+/bin/as -gox tmd.o /tmp/tmd.i
+rm -f /tmp/tmd.i
