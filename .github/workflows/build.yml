@@ -22,18 +22,34 @@ jobs:
         with: { path: kernel3, fetch-depth: 0 }
       - uses: actions/checkout@v4
         with:
-          repository: kdedon/commodore-900-toolchain
-          path: toolchain
-          token: ${{ secrets.C900_CI_TOKEN || github.token }}
-      - uses: actions/checkout@v4
-        with:
           repository: kdedon/commodore-900-kboot
           path: kboot
           token: ${{ secrets.C900_CI_TOKEN || github.token }}
 
-      - name: The compiler
-        working-directory: toolchain
-        run: make all
+      # A RELEASE of the toolchain, not a checkout of it.  The kernel links
+      # five libc objects by name (kobj/), and those are compiled from the
+      # OPERATING SYSTEM's libc -- source the toolchain repository does not
+      # hold.  `make all' in a toolchain checkout therefore builds a perfectly
+      # good compiler with no kobj beside it, and the link fails on the five
+      # files rather than on the missing edge.  The release archive carries
+      # them, so the pinned release is the edge; DEPS names the tag.
+      - name: The toolchain this kernel is built with
+        working-directory: kernel3
+        run: |
+          make deps DEP=toolchain
+          # Which SHAPE resolved, in the log, beside the version: a release and
+          # a checkout are both usable and they are not the same thing.
+          sh mk/deps.sh -k toolchain
+
+      # Before the link, because a disagreement here is a disagreement about
+      # what a structure IS: the kernel and the C library compile a few of the
+      # same headers, each tree keeps a copy, and a link would happily join
+      # objects built from two versions of one struct.
+      - name: Headers shared with the toolchain agree
+        working-directory: kernel3
+        env:
+          C900_TOOLCHAIN: ${{ github.workspace }}/kernel3/deps/commodore-900-toolchain
+        run: make check-shared
 
       # Set, never searched: a job that depended on directory adjacency breaks
       # the first time a runner image moves its checkouts.  The search itself
@@ -41,7 +57,7 @@ jobs:
       - name: Kernel and drivers
         working-directory: kernel3
         env:
-          C900_TOOLCHAIN: ${{ github.workspace }}/toolchain
+          C900_TOOLCHAIN: ${{ github.workspace }}/kernel3/deps/commodore-900-toolchain
           C900_KBOOT: ${{ github.workspace }}/kboot
         run: make kernel drivers
 

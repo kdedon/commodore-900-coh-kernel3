@@ -53,8 +53,10 @@ toolchain)
 			echo unknown
 		fi
 	}
-	HOW="  The toolchain is a repository of its own.
-      git clone <...>/commodore-900-toolchain
+	HOW="  The toolchain is a repository of its own, and DEPS pins one of its
+  RELEASES -- a checkout of it builds a compiler but not the five libc
+  objects the kernel links by name, which come from the OS's libc:
+      make deps DEP=toolchain
   or set C900_TOOLCHAIN= to a checkout or release archive (with host/ccz)."
 	;;
 kboot)

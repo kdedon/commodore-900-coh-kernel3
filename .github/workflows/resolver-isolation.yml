@@ -1,0 +1,51 @@
+# resolver-isolation -- build with NOTHING named, so the SEARCH is what is
+# tested.
+#
+# build.yml and release.yml set C900_TOOLCHAIN and C900_KBOOT explicitly: a job
+# that depended on where a runner happens to put its checkouts breaks the first
+# time the runner image moves them.  That discipline has a cost -- those jobs
+# never execute mk/deps.sh's search at all, so the path a PERSON takes (clone,
+# `make deps', `make') is the one path CI does not cover, and it can rot for
+# months with every build green.
+#
+# So this job does the opposite, deliberately and alone: it checks out this
+# repository, runs `make deps' with no variables set, and builds.  Every
+# dependency has to be found by DEPS and the resolver -- the pinned toolchain
+# release unpacked into deps/, and kboot cloned beside the checkout -- or
+# nothing links.
+name: resolver-isolation
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    steps:
+      # No `path:', so the checkout is the workspace itself and kboot is cloned
+      # beside it -- which is exactly the arrangement siblings() searches for,
+      # and the reason this job does not pass `path: kernel3' like the others.
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      # Both edges, from DEPS alone.
+      - name: Place every dependency
+        run: make deps
+
+      # Named, so a failure says which shape was resolved rather than leaving
+      # it to be guessed from the compile errors.
+      - name: What the search found
+        run: |
+          echo "toolchain: $(sh mk/deps.sh -k toolchain) at $(sh mk/deps.sh toolchain)"
+          echo "kboot:     $(sh mk/deps.sh kboot)"
+
+      # The variables are unset for real: `env -u' rather than trusting that
+      # nothing exported them, because a workflow-level env or a future step
+      # that sets one would silently turn this job back into build.yml.
+      - name: Kernel and drivers, resolved by search
+        run: env -u C900_TOOLCHAIN -u C900_KBOOT make kernel drivers

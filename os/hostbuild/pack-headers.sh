@@ -18,6 +18,7 @@
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 OS=$(cd "$HERE/.." && pwd)
+. "$OS/hostbuild/toolchain.sh"	# $TCINC: kheaders.py reads the closure through it
 
 V=${1:-}
 [ -n "$V" ] || V=$(sh "$HERE/version.sh") || exit 1
@@ -30,13 +31,12 @@ A="$W/$name"
 mkdir -p "$A"
 
 n=0
-python3 "$HERE/kheaders.py" list | while read -r h; do
-	[ -f "$OS/$h" ] || { echo "pack-headers.sh: $h is missing" >&2; exit 1; }
+python3 "$HERE/kheaders.py" pairs | while IFS="	" read -r h src; do
+	[ -f "$src" ] || { echo "pack-headers.sh: $h is missing" >&2; exit 1; }
 	mkdir -p "$A/$(dirname "$h")"
-	cp "$OS/$h" "$A/$h"
+	cp "$src" "$A/$h"
 done
-n=$(python3 "$HERE/kheaders.py" list | wc -l)
-[ "$n" -gt 0 ] || { echo "pack-headers.sh: kheaders.py named no headers" >&2; exit 1; }
+n=$(python3 "$HERE/kheaders.py" pairs | wc -l)
 
 echo "$V" > "$A/VERSION"
 mkdir -p "$DEST"

@@ -213,6 +213,8 @@ struct vidctl {
 
 #define TIOVGETB	0500		/* Read video memory */
 #define TIOVPUTB	0501		/* Write video memory */
+#define TIOCGTERM	0502		/* Get console terminal-type name */
+#define TERMSZ		16		/* Size of the TIOCGTERM name buffer */
 
 /*
  * Bits for TIOCRMSR.

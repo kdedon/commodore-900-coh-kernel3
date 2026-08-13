@@ -54,15 +54,20 @@ cp "$DRV/.drvstamp" "$A/drv/"
 
 # ---- the headers ----
 # Computed by kheaders.py (resolves include closure automatically; no stale lists).
-python3 "$HERE/kheaders.py" list > "$W/headers"
+python3 "$HERE/kheaders.py" pairs > "$W/headers" ||
+	{ echo "pack-kernel.sh: kheaders.py failed" >&2; exit 1; }
 n=0
-while read -r h; do
+while IFS="	" read -r h src; do
 	[ -n "$h" ] || continue
 	mkdir -p "$A/$(dirname "$h")"
-	cp "$OS/$h" "$A/$h"
+	cp "$src" "$A/$h"
 	n=$((n + 1))
 done < "$W/headers"
-[ "$n" -gt 0 ] || { echo "pack-kernel.sh: kheaders.py named no headers" >&2; exit 1; }
+# A count of zero is an answer, not a failure: the kernel ships the headers it
+# produces, and every interface it shares with the C library and the userland is
+# published by the toolchain instead.  kheaders.py failing IS a failure, which
+# is why its exit status is checked above and not this number.
+echo "kernel headers: $n"
 
 # ---- the syscall dispatch table, as data ----
 # Contract with C library stubs (in toolchain); extracted from trailing comments in tab.c.

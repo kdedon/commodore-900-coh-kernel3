@@ -206,7 +206,7 @@ prov_srcid() {
 # whose scope content is identical have the same id, which is exactly the claim
 # an artifact's stamp should be making.
 #
-# prov_srcid keeps its callers (prov_tc_check) unchanged: the compiler's id is
+# prov_srcid keeps its callers (prov_tc_record) unchanged: the compiler's id is
 # recorded by the toolchain repository's own copy of this file, and both sides of
 # that comparison have to compute it the same way.
 prov_scopeid() {
@@ -223,94 +223,70 @@ prov_scopeid() {
 	unset _pj_t
 }
 
-# prov_tc_check <toolchain-build-dir> <record-file> [shape] -- refuse a compiler
-# that is not the one this build tree was made with.  Returns 0 to proceed, 1 to
-# stop; the caller stops, because a sourced file must not decide that for it.
+# prov_tc_record <toolchain-build-dir> <record-file> <id-file> [shape] -- record
+# WHICH COMPILER this build tree is using, and leave its identity somewhere the
+# build system can depend on.  Always returns 0: this reports, it does not
+# decide.
+#
+# The compiler is a build INPUT.  When an input changes, what was built from it
+# is out of date and make rebuilds it -- so <id-file> holds the compiler's
+# source id and nothing else, and every target compiled with the toolchain
+# names it as a prerequisite.  A changed compiler then rebuilds exactly what
+# depends on it, silently and with no step for anyone to remember.
+#
+# <id-file> is rewritten ONLY when the value differs.  Rewriting it every run
+# would make its mtime move every run, and every build would relink the kernel
+# -- a permanent rebuild in place of a permanent question, which is no better.
+# <record-file> carries the full human-readable record and is rewritten every
+# time; nothing depends on it, so its mtime is free to move.
 #
 # <shape> is `checkout' (the default) or `release X.Y.Z'.  A release is pinned
-# on purpose and its source tree is not on this machine, so only the identity
-# half applies to it; running the staleness half would report every pinned
-# release as stale the moment the checkout beside it moved on.
+# on purpose and its source tree is not on this machine, so the staleness
+# comparison is not run for one: it would report every pinned release as stale
+# the moment a checkout beside it moved on.
 #
-# Two different wrongs, both silent until now, both caught here:
-#
-#   STALE      the published compiler is behind its own source tree.  This is
-#              the one that keeps happening: one build directory serves every
-#              lane, so a compiler published hours ago is what a lane picks up
-#              even after the bug it carries has been fixed and committed.  A
-#              check that only compared commits would miss the other half of
-#              it -- an edit made after the build, same commit, same tree --
-#              so the comparison is against prov_srcid, which moves when
-#              uncommitted content moves.
-#
-#   CHANGED    a build tree that recorded one compiler is offered another.  Its
-#              existing objects came from the first; linking the two mixes
-#              codegen from two compilers, which reads downstream as a bug in
-#              whatever was compiled last.
-#
-# C900_TC_ACCEPT=1 proceeds and re-records, for the case where the operator
-# knows -- a deliberate compiler upgrade, or a build tree already known clean.
-prov_tc_check() {
-	_tk_b=$1; _tk_rec=$2; _tk_shape=${3:-checkout}; _tk_why=
+# STALE -- the published compiler is behind its own source -- is still worth
+# saying, because the fix a lane is looking for may be in the tree and not in
+# the compiler.  It is said and not enforced: the remedy is a build in ANOTHER
+# repository, which this one cannot run for you and should not stop for.
+prov_tc_record() {
+	_tk_b=$1; _tk_rec=$2; _tk_idf=$3; _tk_shape=${4:-checkout}
 	_tk_s="$_tk_b/z8001/.provenance"
 	_tk_id=$(prov_get "$_tk_s" tcid)
 	if [ -z "$_tk_id" ]; then
-		echo "!! TOOLCHAIN WITH NO SOURCE ID: $_tk_b" >&2
-		echo "!!   no $_tk_s, or one written before ids existed." >&2
-		echo "!!   Nothing can say which source this compiler came from." >&2
-		# A private build directory (C900_TC_BUILD) is not under a
-		# toolchain checkout, so there is no root to name; say how to
-		# fill THAT directory instead of printing a path that is not one.
-		if [ "${_tk_b%/host/build}" != "$_tk_b" ]; then
-			echo "!!   Rebuild it: (cd ${_tk_b%/host/build} && make cc as ld)," >&2
-		else
-			echo "!!   Rebuild into it: C900_BUILD=$_tk_b make -C <toolchain> cc as ld," >&2
-		fi
-		echo "!!   or, for a release, unpack one packed since ids existed." >&2
-		return 1
+		# Not a refusal, but not silent either: with no id the build has
+		# nothing to depend on, so a compiler swapped for another
+		# equally anonymous one would not rebuild anything.  Both
+		# published shapes carry an id; this is the case where one does
+		# not, and it is worth seeing.
+		echo "== toolchain has no source id ($_tk_s)" >&2
+		echo "==   nothing can say which source this compiler came from," >&2
+		echo "==   so a change of compiler cannot trigger a rebuild." >&2
+		_tk_id=unknown
 	fi
 	_tk_tree=$(prov_get "$_tk_s" tree)
 	_tk_scope=$(prov_get "$_tk_s" scope)
-	_tk_live=unknown
 	if [ "$_tk_shape" = checkout ] && [ -n "$_tk_tree" ] && [ -d "$_tk_tree" ]; then
 		# shellcheck disable=SC2086
 		_tk_live=$(prov_srcid "$_tk_tree" $_tk_scope)
-	fi
-	_tk_was=$(prov_get "$_tk_rec" toolchain_id)
-	if [ "$_tk_live" != unknown ] && [ "$_tk_live" != "$_tk_id" ]; then
-		_tk_why="STALE TOOLCHAIN"
-		echo "!! STALE TOOLCHAIN: the published compiler is behind its own source." >&2
-		echo "!!   built from source id $_tk_id (commit $(prov_get "$_tk_s" commit | cut -c1-8), $(prov_get "$_tk_s" built))" >&2
-		echo "!!   $_tk_tree is now source id $_tk_live (commit $(git -C "$_tk_tree" rev-parse --short=8 HEAD 2>/dev/null))" >&2
-		echo "!!   scope: $_tk_scope" >&2
-		echo "!!   compiler: $_tk_b" >&2
-		echo "!! The compiler's source has moved since it was built.  A fix that is in the" >&2
-		echo "!! tree -- committed or not -- is NOT in the compiler you would use." >&2
-		echo "!! Rebuild it: (cd $_tk_tree && make cc as ld)." >&2
-		echo "!! If another lane owns that checkout, take your own:" >&2
-		echo "!!   git -C $_tk_tree worktree add ../tc-mylane" >&2
-		echo "!!   (cd ../tc-mylane && make cc as ld) && export C900_TOOLCHAIN=\$PWD/../tc-mylane" >&2
-		echo "!! To keep that checkout's SOURCE but not its build directory, set BOTH halves to" >&2
-		echo "!! one private path: C900_BUILD (where the toolchain emits) and C900_TC_BUILD" >&2
-		echo "!! (where this tree reads).  C900_BUILD alone moves only the emitting half." >&2
-	elif [ -n "$_tk_was" ] && [ "$_tk_was" != "$_tk_id" ]; then
-		_tk_why="TOOLCHAIN CHANGED"
-		echo "!! TOOLCHAIN CHANGED under an existing build tree." >&2
-		echo "!!   ${_tk_rec%/*} was built with source id $_tk_was" >&2
-		echo "!!     ($(prov_get "$_tk_rec" toolchain), commit $(prov_get "$_tk_rec" toolchain_commit | cut -c1-8), recorded $(prov_get "$_tk_rec" recorded))" >&2
-		echo "!!   the compiler now offered is source id $_tk_id" >&2
-		echo "!!     ($_tk_b, commit $(prov_get "$_tk_s" commit | cut -c1-8), built $(prov_get "$_tk_s" built))" >&2
-		echo "!! Its objects came from the first compiler; a link would mix two codegens." >&2
-		echo "!! Build from a clean build directory, or keep the compiler you had." >&2
-	fi
-	if [ -n "$_tk_why" ]; then
-		if [ -n "${C900_TC_ACCEPT:-}" ]; then
-			echo "!! C900_TC_ACCEPT is set -- proceeding, and recording $_tk_id." >&2
-		else
-			echo "!! Refusing to build.  C900_TC_ACCEPT=1 proceeds anyway." >&2
-			return 1
+		if [ -n "$_tk_live" ] && [ "$_tk_live" != unknown ] && [ "$_tk_live" != "$_tk_id" ]; then
+			echo "== the compiler at $_tk_b is behind its own source." >&2
+			echo "==   built from $_tk_id (commit $(prov_get "$_tk_s" commit | cut -c1-8), $(prov_get "$_tk_s" built))" >&2
+			echo "==   $_tk_tree is now $_tk_live" >&2
+			echo "==   A fix in that tree is not in this compiler: (cd $_tk_tree && make cc as ld)." >&2
 		fi
 	fi
+
+	# The id, alone, for the build system to depend on.  Compared before it is
+	# moved into place, so an unchanged compiler leaves the mtime alone.
+	mkdir -p "${_tk_idf%/*}"
+	echo "$_tk_id" > "$_tk_idf.tmp.$$"
+	if [ -f "$_tk_idf" ] && cmp -s "$_tk_idf.tmp.$$" "$_tk_idf"; then
+		rm -f "$_tk_idf.tmp.$$"
+	else
+		mv -f "$_tk_idf.tmp.$$" "$_tk_idf"
+	fi
+
 	mkdir -p "${_tk_rec%/*}"
 	{
 		echo "kind=consumer-toolchain"
@@ -321,12 +297,12 @@ prov_tc_check() {
 		echo "toolchain_built=$(prov_get "$_tk_s" built)"
 		echo "recorded=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	} > "$_tk_rec.tmp.$$" && mv -f "$_tk_rec.tmp.$$" "$_tk_rec"
-	unset _tk_b _tk_rec _tk_shape _tk_why _tk_s _tk_id _tk_tree _tk_scope _tk_live _tk_was
+	unset _tk_b _tk_rec _tk_idf _tk_shape _tk_s _tk_id _tk_tree _tk_scope _tk_live
 	return 0
 }
 
 # prov_part_check <label> <stamp> <record> <shape> <fix> -- the same two
-# questions prov_tc_check asks about the compiler, asked about a PART BUILT IN
+# questions prov_tc_record asks about the compiler, asked about a PART BUILT IN
 # ANOTHER REPOSITORY: the kernel, and the userland.  Returns 0 to proceed, 1 to
 # stop; the caller stops, because a sourced file must not decide that for it.
 #

@@ -36,7 +36,7 @@ fi
 fail=0
 
 # Driver: cc2 mode 0012 matches kernel frame convention.
-IMI="-I$OS/include -I$OS/include/sys -I$OS/sys/z8001/h"
+IMI="-I$OS/include -I$OS/include/sys -I$TCINC -I$TCINC/sys -I$OS/sys/z8001/h"
 c900_buildlog "$OS/sys/drv/hostfs.c"
 if "$CC0" $VAR "$OS/sys/drv/hostfs.c" "$OBJ/hostfs.z0" $IMI -DNOMONITOR=1 >>"$LOG" 2>&1 &&
    "$CC1" $VAR "$OBJ/hostfs.z0" "$OBJ/hostfs.z1" >>"$LOG" 2>&1 &&

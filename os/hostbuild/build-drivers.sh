@@ -31,7 +31,7 @@ KLINKID=$(prov_id "$KSYM")
 echo "== linking drivers against kernel link id $KLINKID"
 
 # cc2 mode 0012 (VPEEP + VKERN) matches the kernel; drivers run on kernel frame convention.
-IMI="-I$OS/include -I$OS/include/sys -I$OS/sys/z8001/h"
+IMI="-I$OS/include -I$OS/include/sys -I$TCINC -I$TCINC/sys -I$OS/sys/z8001/h"
 KDEFS="-DNOMONITOR=1"
 
 ok=0; fail=0

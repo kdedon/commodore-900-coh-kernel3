@@ -14,8 +14,8 @@ The two share no source and are not two versions of one codebase.
 Building
 --------
 
-    make deps        # clone commodore-900-toolchain and commodore-900-kboot
-                      # beside this repository (see DEPS)
+    make deps         # place the pinned toolchain release and the kboot
+                      # checkout (see DEPS)
     make kernel       # link os/hostbuild/kobj/kernel.out
     make drivers      # the loadable console drivers, bound to that kernel
     make kernel-dist  # the packaged deliverable (see os/hostbuild/pack-kernel.sh)
@@ -23,10 +23,13 @@ Building
     make check-stamps
     make help
 
-`make deps` places the two checkouts DEPS names as siblings of this
-repository (or inside a `repos/` directory beside it); set C900_TOOLCHAIN or
-C900_KBOOT to point at checkouts elsewhere. See DEPS for what each edge is
-for and why there is no `emu` or `lexicon` row here.
+`make deps` places what DEPS names: the toolchain's pinned release, unpacked
+into `deps/`, and a kboot checkout beside this repository (or inside a
+`repos/` directory beside it). Set C900_TOOLCHAIN or C900_KBOOT to build
+against something else -- either a release archive or a source checkout will
+do for the toolchain, and `make` reports which shape it resolved. See DEPS
+for what each edge is for, why the toolchain edge is a release rather than a
+checkout, and why there is no `emu` or `lexicon` row here.
 
 What this repository does not contain
 --------------------------------------

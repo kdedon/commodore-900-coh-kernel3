@@ -15,8 +15,14 @@
 #   c900-kernel-src-v<V>      the sources the two above were built from, which
 #                             is what the licence obligations attach to.
 #
-# The version comes from the tag being built, through os/hostbuild/version.sh
-# -- fetch-depth: 0 is what makes that answerable.
+# THE TAG IS THE RELEASER'S TO CHOOSE.  The version is read off it and not
+# judged: v0.2, v0.1.1-HOTFIX and v1.0.0-rc1 are all things somebody may
+# legitimately want to cut, and a workflow that refuses a tag because of how it
+# is spelled fights the work instead of checking it.  What is checked is that
+# the kernel links, that the drivers pair with it, and that the packages pack.
+# A dispatch run has no tag and is not a release: it derives a version from
+# os/hostbuild/version.sh (0.0.0-g<commit> for an untagged tree), packs the
+# artifacts for inspection, and publishes nothing.
 name: release
 
 on:
@@ -24,57 +30,61 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   packages:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with: { path: kernel3, fetch-depth: 0 }
-      - uses: actions/checkout@v4
-        with:
-          repository: kdedon/commodore-900-toolchain
-          path: toolchain
-          token: ${{ secrets.C900_CI_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: kdedon/commodore-900-kboot
           path: kboot
           token: ${{ secrets.C900_CI_TOKEN || github.token }}
 
+      # fetch-depth: 0 above is what makes the dispatch fallback answerable --
+      # version.sh reads the tag, and a shallow clone has none.
       - name: The version being released
         working-directory: kernel3
         run: |
-          v=$(sh os/hostbuild/version.sh)
+          case "$GITHUB_REF" in
+          refs/tags/*) v=${GITHUB_REF_NAME#v} ;;
+          *)           v=$(sh os/hostbuild/version.sh) ;;
+          esac
           echo "V=$v" >> "$GITHUB_ENV"
           echo "releasing $v"
-          # A release is exactly a tag: digits and dots, nothing else.
-          # Match on what a release IS, not on the shapes of what it is not --
-          # 0.0.0-g<commit> has one hyphen and slipped a *-*-g* pattern.
-          case $v in
-          *[!0-9.]*|*..*|.*|*.)
-            echo "refusing to release \`$v': not built at a v<x.y.z> tag" >&2
-            exit 1 ;;
-          esac
 
-      - name: The compiler
-        working-directory: toolchain
-        run: make all
+      # The pinned toolchain RELEASE -- see build.yml, which explains why a
+      # checkout of it cannot link this kernel.
+      - name: The toolchain this kernel is built with
+        working-directory: kernel3
+        run: |
+          make deps DEP=toolchain
+          sh mk/deps.sh -k toolchain
 
       - name: Kernel and drivers
         working-directory: kernel3
         env:
-          C900_TOOLCHAIN: ${{ github.workspace }}/toolchain
+          C900_TOOLCHAIN: ${{ github.workspace }}/kernel3/deps/commodore-900-toolchain
           C900_KBOOT: ${{ github.workspace }}/kboot
         run: make kernel drivers
 
+      # KVERSION, not the packers' own default: they fall back to version.sh,
+      # which answers what `git describe' says rather than what was tagged, and
+      # the asset names have to agree with the tag they hang off.
       - name: Pack the three
         working-directory: kernel3
         env:
-          C900_TOOLCHAIN: ${{ github.workspace }}/toolchain
+          C900_TOOLCHAIN: ${{ github.workspace }}/kernel3/deps/commodore-900-toolchain
           C900_KBOOT: ${{ github.workspace }}/kboot
         run: |
-          make kernel-dist
-          make kernel-headers-dist
+          make kernel-dist KVERSION="$V"
+          make kernel-headers-dist KVERSION="$V"
           git archive --format=tar.gz --prefix="c900-kernel-src-v$V/" \
               -o "os/hostbuild/build/dist/c900-kernel-src-v$V.tar.gz" HEAD
 
@@ -87,3 +97,16 @@ jobs:
           name: c900-kernel-${{ env.V }}
           path: kernel3/os/hostbuild/build/dist/*.tar.gz
           if-no-files-found: error
+
+      # The packages are the point of the tag.  Uploading them as workflow
+      # ARTIFACTS alone left them behind a login and expiring after 90 days, so
+      # a downstream repository could not declare a `release' edge on this one
+      # at all -- which is how the toolchain edge above is declared, and the
+      # reason that one works.  A dispatch run skips this: it has no tag to
+      # hang assets off, and its version is not a release's.
+      - uses: softprops/action-gh-release@v2
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        with:
+          files: kernel3/os/hostbuild/build/dist/*.tar.gz
+          fail_on_unmatched_files: true
+          generate_release_notes: true

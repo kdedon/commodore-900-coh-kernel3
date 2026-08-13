@@ -46,7 +46,7 @@ fi
 bistage "$HERE/build/gen" ||
 	{ echo "cannot stage bootinfo.h from $KB"; exit 1; }
 
-IMI="-I$HERE/build/gen -I$OS/include -I$OS/include/sys -I$OS/sys/z8001/h"
+IMI="-I$HERE/build/gen -I$OS/include -I$OS/include/sys -I$TCINC -I$TCINC/sys -I$OS/sys/z8001/h"
 IMD="-I$HERE/build/gen -I$OS/sys/z8001/h -I$OS/sys/h -I$OS/include-0.7.3"
 
 # Size-reduction defines: NOMONITOR (drop debug printfs), TINY (stub ptrace),

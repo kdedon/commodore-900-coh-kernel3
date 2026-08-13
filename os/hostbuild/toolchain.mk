@@ -51,6 +51,11 @@ endif
 C900_TC_SHAPE := $(shell C900_TOOLCHAIN='$(C900_TOOLCHAIN)' sh $(C900_DEPS) -k toolchain)
 TC := $(C900_TOOLCHAIN)/host
 TCB := $(if $(C900_TC_BUILD),$(abspath $(C900_TC_BUILD)),$(TC)/build)
+# $(TCINC): the toolchain's system headers, which the kernel compiles against.
+# A checkout spells them src/include, an unpacked release usr/include.  The
+# shell equivalent is toolchain.sh's $TCINC and resolves the same two names in
+# the same order.
+TCINC := $(firstword $(wildcard $(C900_TOOLCHAIN)/src/include $(C900_TOOLCHAIN)/usr/include))
 # An empty shape is the "did not resolve" answer, whether nothing was found or
 # $(C900_TOOLCHAIN) named something that is neither shape.
 #
@@ -71,6 +76,11 @@ $(error no Z8001 toolchain: C900_TOOLCHAIN and the paths tried are listed above)
 endif
 endif
 COHERENT_OS := $(abspath $(C900_MKDIR)/..)
+# $(TCID): the compiler's source id, alone in a file, rewritten only when it
+# changes.  Every target compiled with the toolchain names it as a prerequisite,
+# which is what makes a changed compiler rebuild what came out of the old one
+# instead of being a question somebody has to answer.
+TCID := $(COHERENT_OS)/hostbuild/build/.tcid
 # Once per build: this file is included by a dozen makefiles and by recursive
 # makes under them, and the exported flag is what keeps that one line.  stderr,
 # not $(info), so a target whose stdout is read by a script stays readable.
@@ -82,28 +92,21 @@ $(shell echo "toolchain: $(C900_TC_SHAPE) at C900_TOOLCHAIN=$(C900_TOOLCHAIN)" >
 ifneq (,$(C900_TC_BUILD))
 $(shell echo "toolchain: build dir C900_TC_BUILD=$(TCB) (not the shared $(TC)/build)" >&2)
 endif
-# The identity check, in the same guard and for the same reason as the report.
-# A build entering through a makefile must be refused on the same terms as one
-# entering through toolchain.sh, or the half that skips the check is the half
-# that ships the wrong object.  prov_tc_check writes its whole diagnosis to
-# stderr and prints nothing on stdout, so `ok' is the only thing captured and
-# an empty capture means it refused.
+# WHICH compiler, recorded where the build system can depend on it.  Done at
+# parse time, before any rule is considered, so $(TCID) is current by the time
+# make compares it against the targets that name it as a prerequisite.
 #
 # Not for a run that compiles nothing.  $(C900_TC_OPTIONAL) is the caller's
 # statement that this one does not -- an info goal, or a dist built from a tree
-# somebody else compiled -- and what the check guards against is SHIPPING an
-# object built by a stale compiler.  A run that emits no object cannot, so
-# refusing it only means `make list-dists' fails because a lane elsewhere is
-# mid-rebuild of a compiler this run will never invoke.
+# somebody else compiled.  Such a run has nothing to rebuild, so it has no use
+# for the dependency and no reason to write a file for it.
 ifeq (,$(C900_TC_OPTIONAL))
-C900_TC_OK := $(shell . $(C900_MKDIR)/provenance.sh; \
-	prov_tc_check '$(TCB)' '$(COHERENT_OS)/hostbuild/build/.tcstamp' '$(C900_TC_SHAPE)' && echo ok)
-ifeq (,$(C900_TC_OK))
-$(error the toolchain identity check refused this build -- the diagnosis is above)
-endif
+$(shell . $(C900_MKDIR)/provenance.sh; \
+	prov_tc_record '$(TCB)' '$(COHERENT_OS)/hostbuild/build/.tcstamp' '$(TCID)' '$(C900_TC_SHAPE)')
 endif
 C900_TC_REPORTED := 1
 endif
 endif
+export TCINC TCID
 export C900_TOOLCHAIN COHERENT_OS C900_TC_SHAPE C900_TC_REPORTED C900_TC_BUILD
 # end of toolchain.mk
