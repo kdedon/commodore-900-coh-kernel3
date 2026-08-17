@@ -25,8 +25,52 @@
 #define	TxEMPTY	0x04		/* transmit buffer empty */
 #define	WR0	0x0101		/* command register */
 #define	RR0	0x0101		/* Tx & Rx status */
+#define	WR3	0x0107		/* Rx params & control */
+#define	WR4	0x0109		/* Tx & Rx misc params & modes */
+#define	WR5	0x010b		/* Tx params & control */
 #define	WR8	0x0111		/* transmit buffer */
 #define	RR8	0x0111		/* receive buffer */
+#define	WR11	0x0117		/* clock mode control */
+#define	WR12	0x0119		/* baud rate generator low byte */
+#define	WR13	0x011b		/* baud rate generator high byte */
+#define	WR14	0x011d		/* misc control */
+
+static	int	sccup;		/* console SCC programmed by sccinit() */
+
+/*
+ * Program the console SCC channel.
+ *
+ * The chip does not arrive here configured.  The boot ROM's power-on
+ * diagnostic tests the SCC by issuing a WR9 channel reset on both channels,
+ * which clears Rx Enable, Tx Enable and the baud rate time constant, and it
+ * reprograms the chip again only along the path that drives the serial
+ * console -- on a machine with a screen the ROM has nothing more to say to
+ * the SCC and leaves the transmitter disabled.  A disabled transmitter never
+ * moves the byte out of the buffer, so RR0 Tx Buffer Empty stays clear after
+ * the first character and the poll in putchar() spins forever.
+ *
+ * The values are the ROM's own: 9600 baud (time constant 17 off the 6MHz
+ * PCLK), 8 bits, no parity, one stop bit, both clocks from the baud rate
+ * generator.  They are also al(4)'s, so the driver reprogramming this channel
+ * when it loads does not change the line: WR4 is its ALMODE, WR11 its BRGINIT,
+ * WR14 its BRGEN, WR3 its RxEN, and WR5 its (TxEN|RTS|DTR) -- the value al
+ * itself writes once the line is open.  The time constant is the one fixed
+ * exception: al derives it from romconf.rom_ctype, while the console keeps the
+ * ROM's, so that early output stays at the rate the ROM already set up.
+ */
+static
+sccinit()
+{
+
+	sccup = 1;
+	outb(WR4, 0x4c);		/* x16 clock, 1 stop bit, no parity */
+	outb(WR11, 0x56);		/* Rx & Tx clocks from the BRG */
+	outb(WR12, 0x11);		/* time constant 17 -> 9600 baud */
+	outb(WR13, 0x00);
+	outb(WR14, 0x03);		/* BRG source = PCLK, BRG enable */
+	outb(WR3, 0xc1);		/* Rx 8 bits/char, Rx enable */
+	outb(WR5, 0xea);		/* DTR, Tx 8 bits/char, Tx enable, RTS */
+}
 
 /*
  * Startup output on the screen of a machine that has one.
@@ -120,6 +164,8 @@ register int c;
 	if (batflag == 0)
 		romcput(c);
 	s = sphi();
+	if (sccup == 0)
+		sccinit();
 	while ((inb(RR0)&TxEMPTY) == 0)
 		;
 	outb(WR8, c);
@@ -135,6 +181,8 @@ getchar()
 {
 	register c;
 
+	if (sccup == 0)
+		sccinit();
 	while ((inb(RR0)&RxAVAIL) == 0)
 		;
 	if ((c = inb(RR8)&0x7F) == '\r')
