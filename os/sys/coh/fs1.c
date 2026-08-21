@@ -59,7 +59,23 @@
  * data, but in the user segment -- a wild fetch, not a failed lookup.  Kernel
  * code with a path of its own calls `ftoi_sys' below rather than `ftoi'.
  */
-#define ftoic(p)	(u.u_io.io_seg==IOSYS ? *p : getubd(p))
+#define ftoic(p)	(--nleft<0 ? (u.u_error=ENOENT, -1)		\
+			 : u.u_io.io_seg==IOSYS ? *p : getubd(p))
+
+/*
+ * Upper bound on the number of characters `ftoi' scans in a path name.
+ * `nleft' is a local of `ftoi', the only user of the macro above, so every
+ * fetch of the scan is counted; running out is reported the way a faulting
+ * fetch would be, with `u.u_error' set and -1 (neither `/' nor `\0')
+ * returned, which each scanning loop tests for.
+ *
+ * The bound is what stops the scan: incrementing an offset past 0xFFFF wraps
+ * back to offset 0 in the same segment rather than faulting, so a path in a
+ * fully mapped user segment holding no `\0' would be walked round that
+ * segment for ever.  1024 is far above any path name the system can produce
+ * and far below the wrap.
+ */
+#define	PATHMAX	1024
 
 /*
  * Map the given filename to an inode.  If an error is encountered,
@@ -86,6 +102,7 @@ char *np;
 	register BUF *bp;
 	fsize_t cseek, fseek, s;
 	int fflag, mflag;
+	int nleft;
 	dev_t dev;
 	ino_t ino;
 	daddr_t b;
@@ -93,6 +110,7 @@ char *np;
 	u.u_cdirn = 0;
 	u.u_cdiri = NULL;
 	u.u_pdiri = NULL;
+	nleft = PATHMAX;
 	if ((c=ftoic(np++)) != '/')
 		cip = u.u_cdir;
 	else {
@@ -101,6 +119,8 @@ char *np;
 	}
 	while (c == '/')
 		c = ftoic(np++);
+	if (u.u_error != 0)		/* faulted or over-long path */
+		return (u.u_error);
 	ilock(cip);
 	cip->i_refc++;
 	if (c == '\0') {
@@ -118,9 +138,15 @@ char *np;
 			if (cp < &u.u_direct.d_name[DIRSIZ])
 				*cp++ = c;
 			c = ftoic(np++);
+			if (u.u_error != 0)	/* else -1 spins here */
+				break;
 		}
 		while (c == '/')
 			c = ftoic(np++);
+		if (u.u_error != 0) {		/* faulted or over-long path */
+			idetach(cip);
+			return (u.u_error);
+		}
 		while (cp < &u.u_direct.d_name[DIRSIZ])
 			*cp++ = '\0';
 		if ((cip->i_mode&IFMT) != IFDIR)
@@ -132,9 +158,20 @@ char *np;
 			return (u.u_error);
 		}
 		cp = u.u_direct.d_name;
-		if (cip->i_ino==ROOTIN && cip->i_dev!=rootdev)
-			if (*cp++=='.' && *cp++=='.' && *cp++=='\0')
+		if (*cp++=='.' && *cp++=='.' && *cp++=='\0') {
+			/*
+			 * `..' in the process' own root directory names that
+			 * directory itself, so `chroot' cannot be climbed out
+			 * of.  This is tested before the mount point case: a
+			 * root which is also the root of a mounted file system
+			 * must not be left either.  Rewriting the name to `.'
+			 * leaves the search below to find the directory.
+			 */
+			if (cip == u.u_rdir)
+				u.u_direct.d_name[1] = '\0';
+			else if (cip->i_ino==ROOTIN && cip->i_dev!=rootdev)
 				cip = ftoim(cip);
+		}
 		b = 0;
 		fflag = 0;
 		mflag = 0;
