@@ -768,7 +768,14 @@ int vec;
 	pos = getuwd(vec);
 	count = getuwd(vec += 2);
 	buffer = getupd(vec += 2);
-	if (pos < 0 || pos + count > mmmask)
+	/*
+	 * `pos' and `count' are whatever the caller put in the argument
+	 * block.  Each end of the window is tested on its own, and the
+	 * length against what is left of the window, so that neither a
+	 * negative count nor a sum that wraps can name memory outside it.
+	 */
+	if (count < 0 || pos < 0 || pos > (paddr_t)mmmask
+	 || (paddr_t)count > (paddr_t)mmmask - pos)
 		u.u_error = EINVAL;
 	if (u.u_error)
 		return;

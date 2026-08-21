@@ -783,23 +783,33 @@ mmioctl(com, vec)
 int com;
 int vec;
 {
-	paddr_t pos;
+	long pos;
 	int count;
 	char *buffer;
 
 	pos = getuwd(vec);
 	count = getuwd(vec += 2);
 	buffer = getupd(vec += 2);
-	if (pos < 0 || pos + count > mmmask)
+	/*
+	 * `pos' and `count' are whatever the caller put in the argument
+	 * block.  Each end of the window is tested on its own, and the
+	 * length against what is left of the window, so that neither a
+	 * negative count nor a sum that wraps can name memory outside it.
+	 */
+	if (count < 0 || pos < 0 || pos > (long)mmmask
+	 || (long)count > (long)mmmask - pos)
 		u.u_error = EINVAL;
 	if (u.u_error)
 		return;
-	pos += ((paddr_t)mmbase) << 4;
+	/*
+	 * `mmbase' is a pointer to the screen, so the window is addressed
+	 * through it rather than through a physical address of its own.
+	 */
 	if (com == TIOVGETB)
-		pucopy(pos, buffer, count);
+		kucopy(mmbase + pos, buffer, count);
 	else {
 		if (mmblank) mmvoff();
-		upcopy(buffer, pos, count);
+		ukcopy(buffer, mmbase + pos, count);
 		if (mmblank) mmvonn();
 	}
 }
