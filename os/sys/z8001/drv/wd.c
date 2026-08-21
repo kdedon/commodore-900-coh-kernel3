@@ -34,6 +34,7 @@
 #include	<uproc.h>
 #include	<errno.h>
 #include	<fdioctl.h>
+#include	<mount.h>
 #include	<sys/bootinfo.h>	/* the loader's own; hostbuild/kboot.sh stages it */
 
 int	wdload();
@@ -47,6 +48,7 @@ int	wdioctl();
 int	nulldev();
 int	nonedev();
 char	*pfix();			/* map phys addr to a char * */
+char	*wdchanged();			/* handle a changed-media report */
 daddr_t	wdbno();			/* returns actual block offset */
 
 CON	wdcon	= {
@@ -93,6 +95,7 @@ CON	wdcon	= {
 #define	NDRIVES	4			/* max drives 2 floppy + 2 hard */
 #define	NHDISKS	2			/* first 2 drives are hard */
 #define	NFBLK	2392			/* number of blocks per floppy */
+#define	MAXBLKCNT 255			/* c_blockcnt is a single byte */
 
 typedef	struct	wdcmd {			/* command block layout */
  	union {
@@ -362,6 +365,8 @@ register BUF	*bp;
 	register unsigned int	pd;		/* partition # */
 	register daddr_t  bno;			/* block # */
 	register int	s;			/* saved machine status */
+	daddr_t	bsize;				/* size of the medium in blocks */
+	daddr_t	nblk;				/* # of blocks we can really do */
 	bool	wdstart();
 
 	d = drive(minor(bp->b_dev));
@@ -372,11 +377,57 @@ register BUF	*bp;
 	wdbufdump(bp);
 #endif
 	if (d >= NDRIVES
-	    || (d < NHDISKS && (pd >= NPSEUDO || bno >= wdbtab[pd].bcount))
-	    || (d >= NHDISKS && (pd != 0 || bno >= NFBLK))) {
+	    || (d < NHDISKS && pd >= NPSEUDO)
+	    || (d >= NHDISKS && pd != 0)) {
 		bp->b_flag |= BFERR;
 		bdone(bp);
 		return;
+	}
+	/*
+	 * One changed-media retry belongs to this request and no other, so
+	 * the budget is granted where the request enters the driver.  A
+	 * retry issued inside the driver does not come back through here.
+	 */
+	bp->b_flag &= ~BFCHG;
+	if (d < NHDISKS)
+		bsize = wdbtab[pd].bcount;
+	else
+		bsize = NFBLK;
+	/*
+	 * Clip the transfer to the end of the medium and to what one
+	 * controller command can express.  A raw request arrives here as ONE
+	 * buffer covering the whole user transfer, so this is the only place
+	 * that can stop it running off the end of the partition -- the
+	 * controller would DMA on into the next one.  What is not transferred
+	 * is reported in b_resid: ioreq() credits the caller with
+	 * io_ioc - b_resid bytes, and nothing else in this driver sets it.
+	 */
+	nblk = bp->b_count >> 9;
+	if (nblk > (daddr_t)MAXBLKCNT)
+		nblk = MAXBLKCNT;
+	if (bno < 0 || bno >= bsize)
+		nblk = 0;
+	else if (bno + nblk > bsize)
+		nblk = bsize - bno;
+	if ((bp->b_flag&BFRAW) == 0) {
+		/*
+		 * Buffered and swap I/O must be transferred whole: a short
+		 * transfer would leave the buffer cache, or a swapped
+		 * segment, holding what was never read.
+		 */
+		if (nblk != (daddr_t)(bp->b_count >> 9)) {
+			bp->b_flag |= BFERR;
+			bdone(bp);
+			return;
+		}
+		bp->b_resid = 0;
+	} else {
+		bp->b_resid = bp->b_count - ((vaddr_t)nblk << 9);
+		bp->b_count = (vaddr_t)nblk << 9;
+		if (nblk == 0) {	/* none of it is on the medium */
+			bdone(bp);
+			return;
+		}
 	}
 	if (d < NHDISKS)			/* only for hard disks */
 		bno += wdbtab[pd].bstart;
@@ -541,6 +592,72 @@ wdintr()
 }
 
 /*
+ * A changed-media report from a floppy drive says that its door was opened,
+ * not that anything failed: the request, the drive and the diskette now in
+ * it are all sound, and the only thing made wrong by the swap is this
+ * kernel's cached idea of the device.  So the device's cached blocks are
+ * discarded and the request is left at the head of the drive queue, which
+ * takes wdintr() straight back into wdstart(); wdstart() clears the command
+ * block and builds it again from the buffer, so nothing describing the
+ * diskette that was taken out reaches the one that was put in.
+ *
+ * Returns NULL when the request has been left to be re-issued, or the
+ * reason it could not be, for the caller to report.
+ *
+ * A mounted filesystem cannot be carried across a swap.  Its super block,
+ * inode table and free list in memory belong to the diskette that left the
+ * drive, and every one of them is written back to whatever is in the drive
+ * when it is written at all, so continuing silently destroys the new
+ * diskette.  The transfer is refused instead.
+ *
+ * A CACHED WRITE cannot be carried across a swap either, and that is what
+ * BFRAW decides.  A raw request is the one the driver was handed through
+ * wdread()/wdwrite(), which set BFRAW: its data is the user process's own,
+ * described by the transfer it asked for, and it was asked for against
+ * whatever is in the drive now -- mkfs(1) or fdformat(1) or dd(1) onto a
+ * diskette just put in.  Re-issuing that is exactly what the caller wants.
+ * A request without BFRAW came out of the buffer cache (bwrite() in bio.c),
+ * where the block it holds was read from the diskette that has just left the
+ * drive and modified there; re-issuing it puts one diskette's blocks at
+ * those block numbers of another.  So it is refused, and the whole device is
+ * invalidated with it: every other cached block of that device describes the
+ * medium that left, and there is nothing to write any of them back to.  The
+ * refused buffer itself is discarded by the BFERR the caller sets -- bdone()
+ * clears BFMOD so no later bsync() can offer it to a third diskette.  The
+ * data is lost because the medium that could receive it is gone.
+ *
+ * The test is on BWRITE and not on `not BREAD' because wdioctl() arms
+ * wdbuf with b_req = FMTCMD and no BFRAW: formatting the diskette that was
+ * just put in is a request made for the new medium, like a raw write, and
+ * is retried.
+ *
+ * The retry is allowed once per request.  A drive that reports the change
+ * again on the very transfer that was re-issued for it has nothing seated
+ * or a change line that will not clear, and repeating the retry would spin
+ * inside the driver with no request ever completing and no way to interrupt
+ * it.
+ */
+char *
+wdchanged(bp)
+register BUF	*bp;
+{
+	register MOUNT	*mp;
+
+	for (mp = mountp; mp != (MOUNT *)0; mp = mp->m_next)
+		if (mp->m_dev == bp->b_dev)
+			return ("diskette changed while mounted. ");
+	if (bp->b_req == BWRITE && (bp->b_flag&BFRAW) == 0) {
+		binval(bp->b_dev);
+		return ("diskette changed under a cached write. ");
+	}
+	if ((bp->b_flag&BFCHG) != 0)
+		return ("diskette change does not clear. ");
+	bp->b_flag |= BFCHG;
+	binval(bp->b_dev);
+	return ((char *)0);
+}
+
+/*
  * got an error - inform the user and try to recover.
  */
 wdharderr(bp, cbp)
@@ -551,13 +668,17 @@ register WDCMD	*cbp;
 	register unsigned char *ucp;
 	register unsigned int pd;
 	register unsigned int bno;	/* only used for display !! */
+	char	*why;			/* why a media change was not absorbed */
 
 	pd = pseudo(minor(bp->b_dev));
 	bno = bp->b_bno;
 	pd = cbp->c_errorbits & 0x7F;
-	if (pd == FCMERROR)		/* media changed? */
-		return;			/* ignore */
-	if ((d = drive(minor(bp->b_dev))) >= NHDISKS)
+	d = drive(minor(bp->b_dev));
+	why = (char *)0;
+	if (pd == FCMERROR && d >= NHDISKS
+	    && (why = wdchanged(bp)) == (char *)0)
+		return;			/* re-issued against the new diskette */
+	if (d >= NHDISKS)
 		printf("fd: floppy disk #%d: ", d-NHDISKS);
 	else
 		printf("hd: hard disk #%d", d);
@@ -567,6 +688,8 @@ register WDCMD	*cbp;
 		printf("no floppy in drive. ");
 	else if (pd == FMERROR && d >= NHDISKS)
 		printf("irrecoverable media error. ");
+	else if (why != (char *)0)
+		printf("%s", why);
 	else {
 		printf(" error=%x [ ", pd);
 		for (d = 0, ucp = (unsigned char *)cbp; d < sizeof(WDCMD); ++d)

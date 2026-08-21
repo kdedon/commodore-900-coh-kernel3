@@ -137,6 +137,41 @@ register dev_t dev;
 }
 
 /*
+ * Detach every buffer belonging to the given device from it, discarding
+ * whatever they hold.  Nothing is written out.
+ *
+ * This is the counterpart of bflush(), and the asymmetry is the point.
+ * bflush() writes modified buffers out because the medium they were read
+ * from is still in the drive to receive them.  binval() is for a device
+ * whose medium is NOT the one those buffers came from -- a diskette that
+ * has been swapped -- where a modified buffer describes blocks of a medium
+ * that has left the drive.  Writing it would put one diskette's data at
+ * those block numbers of another, so the contents are dropped and the
+ * blocks are read again from whatever is in the drive now.
+ *
+ * A buffer whose gate is held is left alone.  It belongs to a transfer that
+ * is in progress, whose owner will complete it and release it against the
+ * medium now in the drive; and testing the gate rather than waiting on it
+ * is what lets this be called from a disk driver's interrupt handler, which
+ * may not sleep in lock().
+ */
+binval(dev)
+register dev_t dev;
+{
+	register BUF *bp;
+	register int s;
+
+	s = sphi();
+	for (bp=&bufl[NBUF-1]; bp >= bufl; --bp) {
+		if (bp->b_dev != dev || locked(bp->b_gate) != 0)
+			continue;
+		bp->b_flag &= ~BFMOD;
+		bp->b_dev = NODEV;
+	}
+	spl(s);
+}
+
+/*
  * Return a buffer containing the given block from the given device.
  * If `f' is not set, the read is asynchronous and no buffer is returned.
  */

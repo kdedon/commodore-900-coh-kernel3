@@ -55,6 +55,7 @@ typedef struct buf {
 #define BFMAP	0x0020			/* Buffer has been mapped */
 #define BFRAW	0x0040			/* Request is raw */
 #define BFTAP	0x0080			/* Request is to a tape */
+#define BFCHG	0x0100			/* Media change already retried once */
 
 #define BFBLK	0x4000			/* Aligned on a block boundary */
 #define BFIOC	0x8000			/* Perform bounds checking */
@@ -73,6 +74,8 @@ typedef struct buf {
  */
 extern	BUF	 *bread();		/* bio.c */
 extern	BUF	 *bclaim();		/* bio.c */
+extern	int	 bflush();		/* bio.c */
+extern	int	 binval();		/* bio.c */
 extern	BUF	 *vread();		/* fs3.c */
 extern	BUF	 *aread();		/* fs3.c */
 extern	daddr_t	 vmap();		/* fs3.c */
