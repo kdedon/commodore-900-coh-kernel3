@@ -311,6 +311,7 @@ unsigned mode;
 	register ino_t *inope;
 	register MOUNT *mp;
 	register INODE *ip;
+	register int badb;
 #if _INODE_BUSY_DUMP
 	int	eninode, etinode;
 	int	lninode, ltinode;
@@ -328,6 +329,7 @@ unsigned mode;
 
 	for (;;) {
 		lock(mp->m_ilock);
+haveilock:
 		smod(mp);
 
 #if _INODE_BUSY_DUMP
@@ -341,7 +343,23 @@ unsigned mode;
 			inop = sbp->s_inode;
 			inope = &sbp->s_inode[NICINOD];
 			for (b=INODEI; b<sbp->s_isize; b++) {
-				if (bad(dev, b)) {
+				/*
+				 * `bad' attaches the bad block inode, and
+				 * `iattach' sleeps on an inode gate, while
+				 * `icopymd'->`ifree' takes `m_ilock' holding
+				 * an inode gate.  Holding `m_ilock' across
+				 * `bad' inverts that order, and a gate sleep
+				 * is uninterruptible, so drop it around the
+				 * call.  If the free list was refilled while
+				 * it was down, throw this scan away and use
+				 * that list rather than overwrite it.
+				 */
+				unlock(mp->m_ilock);
+				badb = bad(dev, b);
+				lock(mp->m_ilock);
+				if (sbp->s_ninode != 0)
+					goto haveilock;
+				if (badb) {
 					ino += INOPB;
 					continue;
 				}
@@ -573,10 +591,23 @@ daddr_t b;
 	register int i;
 	register int m;
 	register int n;
+	register daddr_t *dp;
 	daddr_t l;
+	int oerror;
 
-	if ((ip=iattach(dev, 1)) == NULL)
-		panic("bad()");
+	/*
+	 * `iattach' also fails for the ordinary `Inode table overflow', which
+	 * must not halt the machine.  Answer `bad': the caller then skips the
+	 * block, which costs at worst a few free inodes, where answering
+	 * `good' could allocate inodes out of a block that really is bad.
+	 * The failure is ours, not the caller's, so `u.u_error' is left as it
+	 * was found.
+	 */
+	oerror = u.u_error;
+	if ((ip=iattach(dev, 1)) == NULL) {
+		u.u_error = oerror;
+		return (1);
+	}
 	n = blockn(ip->i_size);
 	if ((m=n) > ND)
 		m = ND;
@@ -595,8 +626,9 @@ daddr_t b;
 		return (0);
 	if ((m=n) > NBN)
 		m = NBN;
+	dp = FP_OFF(bp->b_faddr);
 	for (i=0; i<m; i++) {
-		l = ((daddr_t *)bp)[i];
+		l = dp[i];
 		candaddr(l);
 		if (b == l) {
 			brelease(bp);
