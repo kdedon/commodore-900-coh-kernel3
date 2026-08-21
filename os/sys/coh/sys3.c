@@ -360,6 +360,8 @@ char *sp;
 	register dev_t rdev;
 	register int mode;
 
+	if (super() == 0)
+		return;
 	if (ftoi(sp, 'r') != 0)
 		return;
 	ip = u.u_cdiri;
