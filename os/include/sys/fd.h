@@ -31,6 +31,12 @@ typedef struct fd {
 	struct	 inode *f_ip;		/* Pointer to inode */
 } FD;
 
+/*
+ * Flags (f_flag2).  `f_flag' itself is full: all eight of its bits are the
+ * IPR/IPW/IPE permission and IPNDLY..IPNOCTTY modifier bits of <sys/inode.h>.
+ */
+#define	FFOPNP	0001			/* Open has not completed yet */
+
 #ifdef	KERNEL
 /*
  * Functions.

@@ -152,14 +152,34 @@ int		mode;
 	if ((filep = fdget (fd)) == NULL)
 		return -1;
 
-	iopen (ip, mode);
-
-	if (u.u_error != 0)
-		return -1;
+	/*
+	 * The descriptor is filled in and owns the inode reference BEFORE the
+	 * inode is opened.  A device open sleeps in the driver, and a signal
+	 * taken there does not unwind through here: `sleep' restores
+	 * `u.u_sigenv' and lands in `trap', so nothing below would run, and
+	 * both this structure and the caller's inode reference would be lost.
+	 * Anchored in the slot they are released by `fdclose', at close(2) or
+	 * at exit.  FFOPNP records that the open never completed, so that
+	 * `fdclose' drops the inode without calling a driver close entry for
+	 * an open the driver never finished.
+	 */
 
 	filep->f_ip = ip;
 	filep->f_flag = mode;
+	filep->f_flag2 |= FFOPNP;
 	filep->f_refc = 1;
+
+	iopen (ip, mode);
+
+	if (u.u_error != 0) {
+		filep->f_ip = NULL;
+		filep->f_flag = 0;
+		filep->f_flag2 &= ~FFOPNP;
+		filep->f_refc = 0;
+		return -1;
+	}
+
+	filep->f_flag2 &= ~FFOPNP;
 
 	return 0;
 }
@@ -228,7 +248,20 @@ register unsigned fd;
 	if (fdp->f_refc == 0)
 		panic("fdclose()");
 	if (--fdp->f_refc == 0) {
-		iclose(fdp->f_ip, fdp->f_flag);
+		if ((fdp->f_flag2&FFOPNP) != 0) {
+			/*
+			 * An interrupted open never reached the driver, so
+			 * give the inode reference back the way `fdinit'
+			 * would have on an error return: no device close,
+			 * but an exclusive mark of ours is still ours to
+			 * clear.
+			 */
+			ilock(fdp->f_ip);
+			if ((fdp->f_flag&IPEXCL) != 0)
+				fdp->f_ip->i_flag &= ~IFEXCL;
+			idetach(fdp->f_ip);
+		} else
+			iclose(fdp->f_ip, fdp->f_flag);
 		kfree(fdp);
 	}
 }
