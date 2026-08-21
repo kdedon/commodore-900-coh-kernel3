@@ -1,0 +1,67 @@
+# shared-header-exceptions.tsv -- judged divergences for check-shared-headers.sh's
+# walk of os/sys/h and os/sys/z8001/h against the resolved toolchain.
+#
+# Columns (tab-separated): DIR	BASENAME	REASON
+#   DIR      "sys/h" or "sys/z8001/h", relative to $OS -- which of the two
+#            extra directories the row is about.
+#   BASENAME the header's name, e.g. "proc.h".
+#   REASON   why the two texts are allowed to differ.  Free text, one line,
+#            no tabs.
+#
+# A (DIR, BASENAME) pair that also exists in the toolchain ($TCINC or
+# $TCINC/sys) and is NOT listed here must be byte-identical to the toolchain's
+# copy, or the gate fails naming the file.  A pair that IS listed here but is
+# no longer different from the toolchain's copy is also reported (a stale row
+# hides a divergence that stopped existing, which is its own kind of rot).
+#
+# Background: os/sys/h and os/sys/z8001/h are 0.7.3-donor snapshots.  Under
+# the kernel's own build (link-kernel.sh's IMI, which kheaders.py's IPATH
+# mirrors), os/sys/h is not on the include path at all, and os/sys/z8001/h
+# sits AFTER $TCINC and $TCINC/sys, so any basename the toolchain also
+# carries is read from the toolchain, not from either of these directories.
+# The one config that reads os/sys/z8001/h ahead of the toolchain is
+# link-kernel.sh's IMD, used only to compile sys/z8001/src/ddt.c (the
+# KDDT=1 in-kernel debugger); ddt.c includes <coherent.h> <buf.h> <proc.h>
+# <seg.h>, so of everything in os/sys/z8001/h, only proc.h and seg.h are ever
+# actually read out of that directory by a real build -- see their rows below.
+#
+# DIR		BASENAME	REASON
+sys/h	acct.h	0.7.3-donor snapshot; os/sys/h is on no build's -I path (IMI omits it; IMD's ddt.c does not include acct.h); superseded by the toolchain's rewritten copy.
+sys/h	dir.h	0.7.3-donor snapshot; os/sys/h is on no build's -I path (IMI omits it; IMD's ddt.c does not include dir.h); the live directory-entry shape is os/include/sys/dir.h, checked against the toolchain by property 1.
+sys/h	errno.h	0.7.3-donor snapshot; os/sys/h is on no build's -I path (IMI omits it; IMD's ddt.c does not include errno.h); the live errno numbering is os/include/errno.h, checked against the toolchain by property 1.
+sys/h	fblk.h	0.7.3-donor snapshot; os/sys/h is on no build's -I path (IMI omits it; IMD's ddt.c does not include fblk.h); superseded by the toolchain's rewritten copy.
+sys/h	filsys.h	0.7.3-donor snapshot; os/sys/h is on no build's -I path (IMI omits it; IMD's ddt.c does not include filsys.h); superseded by the toolchain's rewritten copy.
+sys/h	ino.h	0.7.3-donor snapshot; os/sys/h is on no build's -I path (IMI omits it; IMD's ddt.c does not include ino.h); superseded by the toolchain's rewritten copy.
+sys/h	inode.h	0.7.3-donor snapshot; os/sys/h is on no build's -I path (IMI omits it; IMD's ddt.c does not include inode.h); superseded by the toolchain's rewritten copy.
+sys/h	l.out.h	0.7.3-donor snapshot; os/sys/h is on no build's -I path (IMI omits it; IMD's ddt.c does not include l.out.h); the live object format is os/include/l.out.h, checked against the toolchain by property 1.
+sys/h	lpioctl.h	0.7.3-donor snapshot; os/sys/h is on no build's -I path (IMI omits it; IMD's ddt.c does not include lpioctl.h); superseded by the toolchain's rewritten copy.
+sys/h	mtioctl.h	0.7.3-donor snapshot; os/sys/h is on no build's -I path (IMI omits it; IMD's ddt.c does not include mtioctl.h); superseded by the toolchain's rewritten copy.
+sys/h	mtype.h	0.7.3-donor snapshot; os/sys/h is on no build's -I path (IMI omits it; IMD's ddt.c does not include mtype.h); the live object-file magic is os/include/mtype.h, checked against the toolchain by property 1.
+sys/h	proc.h	0.7.3-donor snapshot (NUSEG 6, no shared-library slots -- the generic MI shape, not this target's); shadowed by os/sys/z8001/h/proc.h in the one config that reads this directory (IMD/ddt.c), so never read by any real build.
+sys/h	seg.h	0.7.3-donor snapshot; shadowed by os/sys/z8001/h/seg.h in the one config that reads this directory (IMD/ddt.c), so never read by any real build.
+sys/h	sgtty.h	0.7.3-donor snapshot; os/sys/h is on no build's -I path (IMI omits it; IMD's ddt.c does not include sgtty.h); the live tty-ioctl shape is os/include/sgtty.h, checked against the toolchain by property 1.
+sys/h	signal.h	0.7.3-donor snapshot; os/sys/h is on no build's -I path (IMI omits it; IMD's ddt.c does not include signal.h); the live signal numbering is os/include/signal.h, checked against the toolchain by property 1.
+sys/h	stat.h	0.7.3-donor snapshot; os/sys/h is on no build's -I path (IMI omits it; IMD's ddt.c does not include stat.h); the live stat(2) shape is os/include/sys/stat.h, checked against the toolchain by property 1.
+sys/h	timeb.h	0.7.3-donor snapshot; os/sys/h is on no build's -I path (IMI omits it; IMD's ddt.c does not include timeb.h); superseded by the toolchain's rewritten copy.
+sys/h	times.h	0.7.3-donor snapshot; os/sys/h is on no build's -I path (IMI omits it; IMD's ddt.c does not include times.h); superseded by the toolchain's rewritten copy.
+sys/h	tty.h	0.7.3-donor snapshot; os/sys/h is on no build's -I path (IMI omits it; IMD's ddt.c does not include tty.h); shadowed by os/sys/z8001/h/tty.h whenever the directory is read at all.
+sys/h	uproc.h	0.7.3-donor snapshot; os/sys/h is on no build's -I path (IMI omits it; IMD's ddt.c does not include uproc.h); superseded by the toolchain's rewritten copy.
+sys/z8001/h	proc.h	The Z8001 machine layer's own shape: fixed NUSEG 8 with SISSLIB/SIPSLIB shared-library slots. Textually different from the toolchain's sys/proc.h, which reaches the same NUSEG 8 / SISSLIB / SIPSLIB values through #ifdef _Z8001 so one header serves every port; values agree for this target. Under IMI (the kernel proper) the toolchain copy wins, so this copy is inert there; under IMD (KDDT=1, ddt.c only) this directory precedes the toolchain and ddt.c reads THIS copy -- do not delete it as dead weight.
+sys/z8001/h	seg.h	The Z8001 machine layer's own shape, paired with proc.h above. Textually different from the toolchain's sys/seg.h for the same portability-vs-single-target reason. Under IMI the toolchain copy wins; under IMD (ddt.c) this copy is what gets read -- do not delete it as dead weight.
+sys/z8001/h	canon.h	0.7.3-donor snapshot, always shadowed: os/include and the toolchain both precede os/sys/z8001/h under IMI, and IMD's only compile (ddt.c) does not include canon.h. Superseded by the toolchain's termio-era rewrite.
+sys/z8001/h	chars.h	0.7.3-donor snapshot, always shadowed (see canon.h row); ddt.c does not include chars.h. Superseded by the toolchain's copy.
+sys/z8001/h	const.h	0.7.3-donor snapshot, always shadowed (see canon.h row); ddt.c does not include const.h. Superseded by the toolchain's copy.
+sys/z8001/h	ctype.h	0.7.3-donor snapshot, always shadowed (see canon.h row); ddt.c does not include ctype.h. Superseded by the toolchain's ANSI-era rewrite (the isdigit/isspace table this gate's own header comment warns about).
+sys/z8001/h	deftty.h	0.7.3-donor snapshot, always shadowed (see canon.h row); ddt.c does not include deftty.h. Superseded by the toolchain's copy.
+sys/z8001/h	l.out.h	0.7.3-donor snapshot, always shadowed (see canon.h row); ddt.c does not include l.out.h. The live object format is os/include/l.out.h, checked against the toolchain by property 1.
+sys/z8001/h	machine.h	0.7.3-donor snapshot, always shadowed (see canon.h row); ddt.c does not include machine.h. Superseded by the toolchain's sys/machine.h, the one every port's cc0 predefine (_I386/_Z8001/...) selects branches in.
+sys/z8001/h	mdata.h	0.7.3-donor snapshot, always shadowed (see canon.h row); ddt.c does not include mdata.h. Superseded by the toolchain's copy.
+sys/z8001/h	msig.h	0.7.3-donor snapshot, always shadowed (see canon.h row); ddt.c does not include msig.h. Superseded by the toolchain's copy.
+sys/z8001/h	n.out.h	0.7.3-donor snapshot, always shadowed (see canon.h row); ddt.c does not include n.out.h. The live object format is os/include/n.out.h, checked against the toolchain by property 1.
+sys/z8001/h	param.h	0.7.3-donor snapshot, always shadowed (see canon.h row); ddt.c does not include param.h. Superseded by the toolchain's copy.
+sys/z8001/h	sched.h	0.7.3-donor snapshot, always shadowed (see canon.h row); ddt.c does not include sched.h. Superseded by the toolchain's copy.
+sys/z8001/h	setjmp.h	0.7.3-donor snapshot, always shadowed (see canon.h row); ddt.c does not include setjmp.h. Superseded by the toolchain's copy.
+sys/z8001/h	sgtty.h	0.7.3-donor snapshot, always shadowed (see canon.h row); ddt.c does not include sgtty.h. The live tty-ioctl shape is os/include/sgtty.h, checked against the toolchain by property 1.
+sys/z8001/h	stdio.h	0.7.3-donor snapshot, always shadowed (see canon.h row); ddt.c does not include stdio.h. Superseded by the toolchain's buffered-stdio rewrite.
+sys/z8001/h	tty.h	0.7.3-donor snapshot, always shadowed (see canon.h row); ddt.c does not include tty.h. Superseded by the toolchain's termio-era rewrite.
+sys/z8001/h	types.h	0.7.3-donor snapshot, always shadowed (see canon.h row); ddt.c does not include types.h. Superseded by the toolchain's copy.

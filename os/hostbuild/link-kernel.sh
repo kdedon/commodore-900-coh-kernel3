@@ -47,7 +47,7 @@ bistage "$HERE/build/gen" ||
 	{ echo "cannot stage bootinfo.h from $KB"; exit 1; }
 
 IMI="-I$HERE/build/gen -I$OS/include -I$OS/include/sys -I$TCINC -I$TCINC/sys -I$OS/sys/z8001/h"
-IMD="-I$HERE/build/gen -I$OS/sys/z8001/h -I$OS/sys/h -I$OS/include-0.7.3"
+IMD="-I$HERE/build/gen -I$OS/sys/z8001/h -I$OS/sys/h -I$OS/include -I$OS/include/sys -I$TCINC -I$TCINC/sys"
 
 # Size-reduction defines: NOMONITOR (drop debug printfs), TINY (stub ptrace),
 # READAHEAD=0 (drop read-ahead). KDDT=1 links the in-kernel debugger (~3.5K).
