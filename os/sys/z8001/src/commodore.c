@@ -271,7 +271,7 @@ int si;
 	l = btocru(sp->s_size);		/* 3.2: s_size in BYTES; clicks here */
 	if ((sp->s_flags & SFDOWN) != 0) {
 		if (l >= MSSIZE-1)
-			return (0);
+			return (-1);
 		f |= 0x20;		/* Downward growing segment */
 		hl = MSSIZE-l;
 		b -= hl;
