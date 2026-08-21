@@ -523,6 +523,7 @@ int (*f)();
 	register PROC *pp;
 	register sig_t s;
 	register int (*o)();
+	int ps;
 
 	pp = SELF;
 	if (sig<=0 || sig>NSIG || sig==SIGKILL) {
@@ -531,6 +532,12 @@ int (*f)();
 	}
 	s = (sig_t)1 << --sig;
 	o = u.u_sfunc[sig];
+	/*
+	 * `sendsig' ORs bits into `p_ssig' at interrupt level, and `sig_t' is
+	 * wider than a word, so the read-modify-writes below run at high
+	 * priority: a signal posted between a load and its store is lost.
+	 */
+	ps = sphi();
 	/* This order is critical to isig's use */
 	if (f == SIG_IGN) {
 		pp->p_isig |= s;
@@ -540,6 +547,7 @@ int (*f)();
 		pp->p_isig &= ~s;
 	}
 	pp->p_ssig &= ~s;
+	spl(ps);
 	return (o);
 }
 

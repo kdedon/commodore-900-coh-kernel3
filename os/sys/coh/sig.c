@@ -57,15 +57,20 @@ register PROC *pp;
 	f = ((sig_t)1) << (sig-1);
 	if ((pp->p_isig&f) != 0)
 		return;
+	/*
+	 * `p_ssig' is also set at interrupt level, so the read-modify-write
+	 * and the state test that follows it are done at high priority.
+	 * Nothing in here sleeps.
+	 */
+	s = sphi();
 	pp->p_ssig |= f;
 	if (pp->p_state == PSSLEEP) {
-		s = sphi();
 		pp->p_lback->p_lforw = pp->p_lforw;
 		pp->p_lforw->p_lback = pp->p_lback;
 		addu(pp->p_cval, (utimer-pp->p_lctim)*CVCLOCK);
 		setrun(pp);
-		spl(s);
 	}
+	spl(s);
 }
 
 /*
@@ -76,10 +81,16 @@ nondsig()
 	register PROC *pp;
 	register sig_t mask;
 	register int signo;
+	register int s;
 
 	pp = SELF;
 	signo = 0;
+	/*
+	 * `p_ssig' is set at interrupt level; protect the read-modify-write.
+	 */
+	s = sphi();
 	pp->p_ssig &= ~pp->p_isig;
+	spl(s);
 	if (pp->p_ssig != 0) {
 		mask = (sig_t) 1;
 		signo += 1;
@@ -99,6 +110,7 @@ actvsig()
 	register int n;
 	register PROC *pp;
 	register int (*f)();
+	register int s;
 
 #if EBUG_VM > 0
 	printf("actvsig ");	/** DEBUG **/
@@ -108,7 +120,12 @@ actvsig()
 		return;
 	pp = SELF;
 	--n;
+	/*
+	 * `p_ssig' is set at interrupt level; protect the read-modify-write.
+	 */
+	s = sphi();
 	pp->p_ssig &= ~((sig_t)1<<n);
+	spl(s);
 	f = u.u_sfunc[n];
 	u.u_signo = ++n;
 	if (f != SIG_DFL) {
@@ -188,7 +205,8 @@ sigdump()
 			n = ssize > SCHUNK ? SCHUNK : ssize;
 			u.u_io.io_ioc = n;
 			iwrite(ip, &u.u_io);
-			u.u_io.io_phys += (paddr_t)n;
+			/* `io_phys' is advanced by ioread() as the data is
+			 * taken out of the segment. */
 			ssize -= (paddr_t)n;
 		}
 		sp->s_lrefc--;
