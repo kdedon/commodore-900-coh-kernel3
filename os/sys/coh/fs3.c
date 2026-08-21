@@ -385,7 +385,7 @@ daddr_t lb;
 		if (pb==0 || lp==list)
 			return (pb);
 		if ((bp=bread(ip->i_dev, pb, 1)) == NULL)
-			return (0);
+			return (-1);		/* error, not a hole */
 		dp = FP_OFF(bp->b_faddr);
 		pb = dp[*--lp];
 		brelease(bp);
