@@ -28,7 +28,7 @@ typedef struct fd {
  * operator ("in #if", and the compile stops).  An identifier that is not a
  * macro counts as zero in an #if for all three preprocessors, so the test
  * means the same to each of them. */
-#if _I386 || _Z8001
+#if _I386 || Z8001
 	char	 f_flag2;		/* More flags */
 #endif
 	short	 f_refc;		/* Reference count */

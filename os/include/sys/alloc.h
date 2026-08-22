@@ -34,7 +34,7 @@ typedef struct all {
 /*
  * Portable defines for the allocator.
  */
-#ifdef	_Z8001
+#ifdef	Z8001
 /* Large-model: mask the whole far address IN THE PAIR (the 0.7.3 Z8001 form;
  * the shipped kernel's setarena_ compiles exactly this: AND of the offset
  * word, segment untouched).  The NULL-round-trip form below truncates the

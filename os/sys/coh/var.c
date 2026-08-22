@@ -74,7 +74,7 @@ long	 lbolt;				/* coherent.h */
 TIM	stimer;				/* coherent.h */
 unsigned msize;				/* coherent.h */
 unsigned asize;				/* coherent.h */
-#ifndef	_Z8001
+#ifndef	Z8001
 /* on the Z8001 the init code is embedded in md.s data, which defines
  * icodep/icodes itself (the 0.7.3 model) */
 char	 *icodep;			/* coherent.h */

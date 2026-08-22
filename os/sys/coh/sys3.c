@@ -512,7 +512,7 @@ register char * base;
 int count;
 int mode;
 {
-#ifdef _Z8001
+#ifdef Z8001
 	/*
 	 * User addresses are segmented far pointers whose validity the MMU
 	 * enforces in hardware; the per-byte user accessors (getubd/putubd)

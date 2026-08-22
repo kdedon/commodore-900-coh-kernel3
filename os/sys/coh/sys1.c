@@ -145,7 +145,7 @@ char *cp;
 	sp = SELF->p_segp[SIPDATA];
 	sb = u.u_segl[SIPDATA].sr_base;
 	if (cp != NULL) {
-#ifdef _Z8001
+#ifdef Z8001
 		/*
 		 * A user address is seg:off, with the segment number in bits
 		 * 24..30 (machz8001.h ADDR) and only SIXTEEN bits of offset, so
@@ -176,7 +176,7 @@ char *cp;
 #ifdef	OLD
 	return (0);
 #else
-#ifdef _Z8001
+#ifdef Z8001
 	/* Carry into the segment number: the break may be past the end of the
 	 * first hardware segment now. */
 	sb = vadd(sb, sp->s_size);

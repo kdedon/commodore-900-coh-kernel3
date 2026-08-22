@@ -244,7 +244,7 @@ fsize_t n;
 	register int r;
 
 	r = (f&(SFSYST|SFHIGH|SFTEXT|SFSHRX|SFDOWN)) | SFCORE;
-#ifdef _Z8001
+#ifdef Z8001
 	n = bruc(n);		/* segments are click-granular on this MMU */
 #else
 	n +=  (BSIZE-1);
@@ -355,7 +355,7 @@ fsize_t n;
 	register paddr_t nb;
 	register int dowflag;
 
-#ifdef _Z8001
+#ifdef Z8001
 	n = bruc(n);		/* segments are click-granular on this MMU:
 				 * a non-click s_size drifts the whole segment
 				 * pool off alignment (salloc rounds the same
@@ -653,7 +653,7 @@ fsize_t  n;
 		spl(s);
 		if ((bp->b_flag&BFERR) != 0)
 			panic("Swapio error");
-#ifndef _Z8001
+#ifndef Z8001
 		FP_OFF(bp->b_faddr) += nb;
 #else
 		/*

@@ -10,7 +10,7 @@
 #ifndef	MMU_H
 #define	MMU_H
 
-#ifdef	_Z8001
+#ifdef	Z8001
 /*
  * The Z8001 kernel is LARGE-model, so a far virtual address (faddr_t) is
  * DIRECTLY usable as a pointer.  FP_OFF in value position is therefore the address itself -- the
@@ -26,7 +26,7 @@
 #define	FP_SEG(f)	( ((unsigned short *) &(f))[0] )
 #define	FP_OFFW(f)	( ((unsigned short *) &(f))[1] )
 
-#else	/* !_Z8001 */
+#else	/* !Z8001 */
 
 #ifdef _I386
 #ifndef TYPES_H
@@ -255,6 +255,6 @@ extern	void	vremap();	/* void    vremap( SEG * );		*/
 
 #endif /* _I386 */
 
-#endif	/* !_Z8001 */
+#endif	/* !Z8001 */
 
 #endif /* MMU_H */

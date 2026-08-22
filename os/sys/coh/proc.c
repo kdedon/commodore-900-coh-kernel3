@@ -176,7 +176,7 @@ int (*f)();
 		}
 		pp->p_segp[SIUSERP] = sp;
 		msetsys(&mcon, f, FP_SEL(sp->s_faddr));
-#ifdef	_Z8001
+#ifdef	Z8001
 		/* s_faddr is not a pointer here (see mdstub.c): write the
 		 * context into the u-area segment through a transient
 		 * window, as 0.7.3's kscopy() did */
@@ -254,7 +254,7 @@ register char *name;
 
 	for (i = 0; i < sizeof (comm); i++)
 		comm[i] = (*name != '\0') ? *name++ : '\0';
-#ifdef	_Z8001
+#ifdef	Z8001
 	psegcopy(comm, pp->p_segp[SIUSERP], offset(uproc, u_comm[0]),
 		sizeof (comm));
 #else
@@ -386,7 +386,7 @@ pfork()
 		   MAPIO(cpp->p_segp[SIUSERP]->s_vmem,offset(uproc,u_syscon)),
 			(char *)&mcon);
 #else
-#ifdef	_Z8001
+#ifdef	Z8001
 		psegcopy((char *)&mcon, cpp->p_segp[SIUSERP],
 			offset(uproc, u_syscon), sizeof(mcon));
 #else

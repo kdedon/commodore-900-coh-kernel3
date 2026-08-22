@@ -20,7 +20,7 @@
 typedef	unsigned int	aold_t;		/* Auxiliary map save		*/
 typedef	unsigned int	bmap_t;		/* Buffer map			*/
 typedef	unsigned int	bold_t;		/* Buffer map save		*/
-#ifdef	_Z8001
+#ifdef	Z8001
 typedef	char	*cmap_t;		/* Clist map (0.7.3 Z8001: a real
 					 * pointer -- clists live in their own
 					 * permanently mapped segment) */
@@ -51,7 +51,7 @@ typedef	long	 	off_t;		/* Lengths			*/
 typedef	long	 	paddr_t;	/* Physical memory address	*/
 typedef	long	 	sig_t;		/* Signal bits			*/
 typedef	long	 	time_t;		/* Time				*/
-#ifdef	_Z8001
+#ifdef	Z8001
 typedef	unsigned long	vaddr_t;	/* Virtual memory address (seg:off,
 					 * the 0.7.3 Z8001 width) */
 #else

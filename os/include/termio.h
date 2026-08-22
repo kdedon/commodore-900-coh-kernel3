@@ -11,11 +11,11 @@
 #define TERMIO_H
 
 /*
- * _Z8001 joins the list: this machine's tty carries a termio and answers the
+ * Z8001 joins the list: this machine's tty carries a termio and answers the
  * TC* ioctls (sys/drv/tty.c, KTTY=termio), so its userland gets the struct and
  * the command codes rather than an empty header.
  */
-#if (defined _I386 || defined _Z8001 || defined KERNEL)
+#if (defined _I386 || defined Z8001 || defined KERNEL)
 #define USE_TERMIO
 #endif
 

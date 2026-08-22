@@ -29,7 +29,7 @@
 
 #include <sys/types.h>
 #ifndef FSIZE_T_DEFINED		/* the 0.7.3 donor sys/types.h omits fsize_t */
-#ifndef _Z8001
+#ifndef Z8001
 typedef long fsize_t;
 #endif
 #endif

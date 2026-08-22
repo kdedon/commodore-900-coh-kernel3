@@ -123,7 +123,7 @@ read_cmos(reg)
  * s_mbase there), and the MI's "FP_SEL != 0 means mapped" tests hold
  * (RAM starts at click 0x200).  s_faddr is NOT a dereferenceable
  * pointer here -- the two MI sites that wrote through it (proc.c
- * u_syscon setup) use psegcopy() (pcopy.c) under _Z8001, as does
+ * u_syscon setup) use psegcopy() (pcopy.c) under Z8001, as does
  * eveinit below; 0.7.3 did the same via kscopy().
  *
  * vremap recomputes the click base after a segment moves (krunch,

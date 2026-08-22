@@ -21,7 +21,7 @@
  * This system runs in segmented mode.
  *
  * FORWARD-PORT: this is the 0.7.3 sys/z8001/h/machine.h uplifted to the
- * 3.2 MI contract (included from <sys/machine.h> under _Z8001).  Deltas
+ * 3.2 MI contract (included from <sys/machine.h> under Z8001).  Deltas
  * from the 0.7.3 original are marked "3.2:".
  */
 #ifndef	 MACHZ8001_H

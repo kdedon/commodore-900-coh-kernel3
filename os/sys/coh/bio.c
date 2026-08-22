@@ -67,7 +67,7 @@ bufinit()
 	faddr_t f;
 	paddr_t p;
 
-#ifdef	_Z8001
+#ifdef	Z8001
 	/* 0.7.3 model: commodore.c maps the buffer pool and publishes its
 	 * kernel-virtual base as _bvirt (segment BFS); buffers stride from
 	 * there.  (The i286 branch constructs a selector:offset by hand.) */
@@ -88,7 +88,7 @@ bufinit()
 		bp->b_dev = NODEV;
 		bp->b_faddr = f;
 		bp->b_paddr = p;
-#ifdef	_Z8001
+#ifdef	Z8001
 		f += BSIZE;		/* far address strides within BFS */
 #else
 		FP_OFF(f) += BSIZE;

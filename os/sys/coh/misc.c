@@ -39,7 +39,7 @@
 #include <sys/ino.h>
 #include <sys/stat.h>
 
-#ifndef	_Z8001
+#ifndef	Z8001
 /* on the Z8001 kkcopy/kclear are md.s assembler routines */
 /*
  * Copy `n' bytes from `bp1' to `bp2'.

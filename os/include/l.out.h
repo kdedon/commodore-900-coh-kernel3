@@ -15,7 +15,7 @@
  */
 
 #ifndef	 L_OUT_H
-#ifdef	_Z8001
+#ifdef	Z8001
 /*
  * Z8001: the 32-bit-addressing l.out (n.out.h) is the native object
  * format -- assembler output, linker input/output, kernel exec input.
@@ -109,7 +109,7 @@ struct nlist	{
 #define LR_BYTE	(0<<5)		/* Rel. a byte			*/
 #define LR_WORD	(1<<5)		/* Rel. a word			*/
 
-#endif	/* !_Z8001 */
+#endif	/* !Z8001 */
 #endif
 
 /* end of l.out.h */

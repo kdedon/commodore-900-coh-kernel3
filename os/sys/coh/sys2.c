@@ -594,7 +594,7 @@ int msec;
 	 */
 	if ( npoll ) {
 		pollp = &pollfds[npoll];
-#ifdef _Z8001
+#ifdef Z8001
 		/*
 		 * No flat limit check -- same reasoning as useracc()
 		 * (sys3.c): a user address is a segmented far pointer whose

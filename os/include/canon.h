@@ -15,7 +15,7 @@
 #ifndef	CANON_H
 #define	CANON_H	CANON_H
 
-#ifdef	_Z8001
+#ifdef	Z8001
 /*
  * Z8001 (big-endian): EVERY canonical field swaps -- the 0.7.3 Z8001
  * canon.h verbatim (the i8086 macros below are little-endian no-ops
@@ -36,7 +36,7 @@ long	_canl();
 #define	candev(d)	((d)=_canw(d))
 #define	canino(i)	((i)=_canw(i))
 
-#else	/* !_Z8001 (i8086) */
+#else	/* !Z8001 (i8086) */
 
 long	_canl();
 
@@ -50,6 +50,6 @@ long	_canl();
 #define	cantime(t)	((t)=_canl(t))
 #define	canvaddr(v)
 
-#endif	/* !_Z8001 */
+#endif	/* !Z8001 */
 
 #endif
