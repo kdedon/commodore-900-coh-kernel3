@@ -13,8 +13,25 @@
 #ifndef	 SIGNAL_H
 #define	 SIGNAL_H	SIGNAL_H
 
+/*
+ * Two spellings of the same two declarations.  Both return a pointer to a
+ * handler; what differs is the type the HANDLER is declared to return, which
+ * no caller reads -- nothing calls through the returned pointer for a value --
+ * and the pointer is the same width either way.
+ *
+ * _MWC1985 is defined by the flavour that runs the June 1985 compiler, and
+ * that compiler will not parse a function whose return type is a pointer to a
+ * function returning void: `void (*f())()' is "illegal use of \"void\" type",
+ * though `void (*p)()' as an object and a (void(*)()) cast are both fine.  int
+ * there is what the 1985 <signal.h> itself declared.
+ */
+#ifdef	_MWC1985
+extern int	(*signal())();
+extern int	(*sigset())();
+#else
 extern void	(*signal())();
 extern void	(*sigset())();
+#endif
 
 #ifdef _I386
 #define SIGHUP	1			/* Hangup */

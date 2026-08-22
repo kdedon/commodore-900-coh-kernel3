@@ -7,7 +7,12 @@
 #include <sys/poll.h>
 #include <sys/clist.h>
 #include <sgtty.h>
-#if defined(_I386) || defined(_Z8001)
+/* An identifier, not defined(): the June 1985 preprocessor, which reads these
+ * headers when the 1985 compiler is the flavour building, has no defined()
+ * operator ("in #if", and the compile stops).  An identifier that is not a
+ * macro counts as zero in an #if for all three preprocessors, so the test
+ * means the same to each of them. */
+#if _I386 || _Z8001
 #include <termio.h>
 #endif
 #include <sys/timeout.h>
@@ -39,7 +44,7 @@ typedef struct tty {
 	int	t_opos;		/* Original horizontal position */
 	struct	sgttyb t_sgttyb;/* Stty/gtty information */
 	struct	tchars t_tchars;/* Tchars information */
-#if defined(_I386) || defined(_Z8001)
+#if _I386 || _Z8001
 	struct	termio t_termio;
 	TIM	t_vtime;	/* VTIME timer (4.x termio read) */
 #endif

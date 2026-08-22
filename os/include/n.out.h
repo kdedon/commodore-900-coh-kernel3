@@ -16,6 +16,17 @@
 #ifndef	 L_OUT_H
 #define	 L_OUT_H
 
+/*
+ * No `#pragma align 2' in this header.  Two is the alignment this machine
+ * gives every scalar already -- a long sits on an even boundary, not on a
+ * multiple of four -- so the pragma would name the alignment in force and
+ * change no offset and no size.  The June 1985 preprocessor, which reads
+ * these headers when the 1985 compiler is the flavour building, diagnoses
+ * `#pragma' as an illegal control line wherever it stands, including inside
+ * a conditional it is skipping, so there is no spelling of it that all three
+ * preprocessors read.
+ */
+
 #include <sys/types.h>
 #ifndef FSIZE_T_DEFINED		/* the 0.7.3 donor sys/types.h omits fsize_t */
 #ifndef _Z8001
@@ -93,10 +104,8 @@ struct	ldheader {
 struct	ldsym {
 	char	ls_id[NCPLN];		/* Symbol name		*/
 	short	ls_type;		/* Global + Seg.	*/
-#pragma	align 2
 	long	ls_addr;		/* Value of symbol	*/
 };
-#pragma	align
 
 /*
  * The nlist structure for the nlist routine.

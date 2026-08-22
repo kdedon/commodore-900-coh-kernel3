@@ -25,7 +25,12 @@
 #define	O_NDELAY	0x04	/* non-blocking i/o			*/
 #define	O_APPEND	0x08	/* append (writes guaranteed at the end	*/
 
-#if defined(_I386) || defined(_Z8001)
+/* An identifier, not defined(): the June 1985 preprocessor, which reads these
+ * headers when the 1985 compiler is the flavour building, has no defined()
+ * operator ("in #if", and the compile stops).  An identifier that is not a
+ * macro counts as zero in an #if for all three preprocessors, so the test
+ * means the same to each of them. */
+#if _I386 || _Z8001
 #define O_SYNC		0x10	/* sync on every write			*/
 #define	O_NONBLOCK	0x80	/* non-blocking	i/o			*/
 

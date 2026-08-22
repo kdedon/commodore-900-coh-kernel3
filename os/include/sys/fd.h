@@ -23,7 +23,12 @@
  */
 typedef struct fd {
 	char	 f_flag;		/* Flags */
-#if defined(_I386) || defined(_Z8001)
+/* An identifier, not defined(): the June 1985 preprocessor, which reads these
+ * headers when the 1985 compiler is the flavour building, has no defined()
+ * operator ("in #if", and the compile stops).  An identifier that is not a
+ * macro counts as zero in an #if for all three preprocessors, so the test
+ * means the same to each of them. */
+#if _I386 || _Z8001
 	char	 f_flag2;		/* More flags */
 #endif
 	short	 f_refc;		/* Reference count */
