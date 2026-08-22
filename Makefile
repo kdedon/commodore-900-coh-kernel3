@@ -1,14 +1,13 @@
-# Makefile -- build entry point for commodore-900-coh-kernel3,
-# COHERENT 3-series kernel for the Commodore 900 (Z8001).
+# COHERENT 3.x kernel for the Commodore 900 (Z8001).
 #
 #   make kernel           link the kernel (os/hostbuild/kobj/kernel.out)
 #   make drivers          loadable console drivers, bound to that kernel
-#   make kernel-dist      packaged deliverable (image, drivers, headers, gate)
-#   make kernel-headers   header set a kernel-side compile needs
-#   make check-stamps     kernel/driver link-id pairing gate
-#   make check-shared     headers kept in both trees still agree with the toolchain
-#   make deps             place the toolchain release and the kboot checkout
-#   make clean            drop build products (not the deps)
+#   make kernel-dist      package the kernel and drivers
+#   make kernel-headers   report the exported kernel headers
+#   make check-stamps     verify kernel/driver link IDs
+#   make check-shared     compare headers shared with the toolchain
+#   make deps             fetch inputs listed in DEPS
+#   make clean            remove build products
 
 SHELL	= /bin/sh
 .DELETE_ON_ERROR:
@@ -28,7 +27,15 @@ HB	:= $(OS)/hostbuild
 all: kernel drivers
 
 help:
-	@sed -n '2,20p' $(HERE)/Makefile
+	@printf '%s\n' \
+	  'make                     build the kernel' \
+	  'make drivers             build the loadable console drivers' \
+	  'make kernel-dist         package the kernel and drivers' \
+	  'make kernel-headers-dist package the exported headers' \
+	  'make check-stamps        verify kernel/driver link IDs' \
+	  'make check-shared        compare shared toolchain headers' \
+	  'make deps                fetch inputs listed in DEPS' \
+	  'make clean               remove build products'
 
 # Info goals need no toolchain; everything else resolves it first.
 # kernel-headers is NOT here: the header set is the include closure, most of

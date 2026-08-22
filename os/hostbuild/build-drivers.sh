@@ -33,6 +33,8 @@ echo "== linking drivers against kernel link id $KLINKID"
 # cc2 mode 0012 (VPEEP + VKERN) matches the kernel; drivers run on kernel frame convention.
 IMI="-I$OS/include -I$OS/include/sys -I$TCINC -I$TCINC/sys -I$OS/sys/z8001/h"
 KDEFS="-DNOMONITOR=1"
+CC2MODE=0012
+DRVLDFLAGS=-X
 
 ok=0; fail=0
 
@@ -41,7 +43,7 @@ cc_one() {	# cc_one <src> [extra-cpp-defines...] -> $OBJ/<stem>.o
 	c900_buildlog "$src"
 	"$CC0" $VAR "$src" "$OBJ/$stem.z0" $IMI $KDEFS "$@" >>"$LOG" 2>&1 &&
 	"$CC1" $VAR "$OBJ/$stem.z0" "$OBJ/$stem.z1" >>"$LOG" 2>&1 &&
-	"$CC2" 0012 "$OBJ/$stem.z1" "$OBJ/$stem.o" "$OBJ/$stem.scr" 0 >>"$LOG" 2>&1
+	"$CC2" "$CC2MODE" "$OBJ/$stem.z1" "$OBJ/$stem.o" "$OBJ/$stem.scr" 0 >>"$LOG" 2>&1
 }
 
 as_one() {	# as_one <src.s> [extra-cpp-defines...] -> $OBJ/<stem>.o
@@ -55,7 +57,7 @@ as_one() {	# as_one <src.s> [extra-cpp-defines...] -> $OBJ/<stem>.o
 # read concurrently by dist.py).
 link_drv() {	# link_drv <name> <obj...>
 	name=$1; shift
-	if "$LD" -X -o "$OUT/.$name.new" "$@" -k"$KSYM" >>"$LOG" 2>&1; then
+	if "$LD" $DRVLDFLAGS -o "$OUT/.$name.new" "$@" -k"$KSYM" >>"$LOG" 2>&1; then
 		chmod +x "$OUT/.$name.new"
 		mv -f "$OUT/.$name.new" "$OUT/$name"
 		ok=$((ok+1)); echo "  $name: OK ($(wc -c < "$OUT/$name") B)"
@@ -124,7 +126,19 @@ if [ "$fail" = 0 ]; then
 		-- "kernel_linkid=$KLINKID" \
 		   "drivers=$(cd "$OUT" && ls | grep -v '^\.' | tr '\n' ' ')"
 	echo "== drv stamp: kernel link id $KLINKID"
+	# The compiler contract, published beside the drivers it produced, so a
+	# loadable driver whose source lives in another repository is built with
+	# the settings THIS kernel was built with rather than with a copy of them
+	# kept by the consumer.  pack-kernel.sh composes the release's kdrv.conf
+	# from this file; a dot name keeps it out of the driver list above.
+	cat > "$OUT/.kdrv.conf" <<EOF
+kernel_linkid=$KLINKID
+ccvar=$VAR
+cc2mode=$CC2MODE
+cdefs=$KDEFS
+ldflags=$DRVLDFLAGS
+EOF
 else
-	rm -f "$OUT/.drvstamp"
+	rm -f "$OUT/.drvstamp" "$OUT/.kdrv.conf"
 fi
 [ "$fail" = 0 ]

@@ -24,7 +24,8 @@ KOBJ="$HERE/kobj"
 DRV="$HERE/build/drv"
 for p in "$KOBJ/kernel.out:make kernel" \
 	 "$KOBJ/kernel.stamp:make kernel" \
-	 "$DRV/.drvstamp:make drivers"; do
+	 "$DRV/.drvstamp:make drivers" \
+	 "$DRV/.kdrv.conf:make drivers"; do
 	f=${p%:*}; t=${p#*:}
 	[ -e "$f" ] || { echo "pack-kernel.sh: $f is missing -- run \`$t'" >&2; exit 1; }
 done
@@ -50,7 +51,7 @@ for f in "$DRV"/*; do
 	case $(basename "$f") in .*) continue;; esac
 	cp "$f" "$A/drv/"
 done
-cp "$DRV/.drvstamp" "$A/drv/"
+cp "$DRV/.drvstamp" "$DRV/.kdrv.conf" "$A/drv/"
 
 # ---- the headers ----
 # Computed by kheaders.py (resolves include closure automatically; no stale lists).
@@ -89,7 +90,8 @@ awk '/^struct[ \t]+systab[ \t]+sysitab/ { on = 1; next }
 
 # ---- the driver-build contract ----
 # No linker script; layout decided by flags. cc2 mode selects kernel frame convention.
-cat > "$A/kdrv.conf" <<EOF
+{
+	cat <<EOF
 # kdrv.conf -- what a loadable driver must be built with to load into this
 # kernel.  Read as key=value; see build-drivers.sh for the invocations.
 #
@@ -98,15 +100,17 @@ cat > "$A/kdrv.conf" <<EOF
 # data share the address space.  It keeps its symbol table -- that is how
 # /etc/load finds the *con_ configuration table -- and it must be executable or
 # exlopen() refuses it with EACCES.
+#
+# The compiler keys below are drv/.kdrv.conf verbatim: the values the drivers
+# in this package were actually built with, written by the build that built
+# them.  A consumer reading them from a checkout finds the same file at
+# hostbuild/build/drv/.kdrv.conf.
 kernel=boot/kernel.out
-kernel_linkid=$LINKID
 version=$V
-ccvar=${CCZ_VAR:-800000020800}
-cc2mode=0012
-cdefs=-DNOMONITOR=1
 incdirs=include include/sys
-ldflags=-X
 EOF
+	cat "$DRV/.kdrv.conf"
+} > "$A/kdrv.conf"
 
 # ---- the pairing gate, shipped with the thing it judges ----
 # check-stamps.sh resolves kobj/ and build/drv relative to its own directory (below).
