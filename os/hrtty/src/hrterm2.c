@@ -6,7 +6,7 @@
 #include	"../h/machine.h"
 #include	"../h/display.h"
 #include	"../h/subr.h"
-#include	"../h/hrio.h"
+#include	<sys/hrio.h>
 #include	"../h/font.h"
 
 extern	unsigned short	nulls[];

@@ -26,5 +26,5 @@
 # compiler emits; a floating edge would mean a kernel that links differently
 # tomorrow with nothing here changed.
 
-toolchain  release  https://github.com/kdedon/commodore-900-toolchain  v0.1.2  c900-toolchain-@REF@-@HOST@  commodore-900-toolchain
+toolchain  release  https://github.com/kdedon/commodore-900-toolchain  v0.1.3  c900-toolchain-@REF@-@HOST@  commodore-900-toolchain
 kboot      git      https://github.com/kdedon/commodore-900-kboot      main

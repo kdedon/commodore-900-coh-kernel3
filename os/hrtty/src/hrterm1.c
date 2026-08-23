@@ -12,7 +12,7 @@
 #include	<tty.h>
 #include	<uproc.h>
 #include	<signal.h>
-#include	"../h/hrio.h"
+#include	<sys/hrio.h>
 #include	"../h/font.h"
 
 #define NMINOR 1
