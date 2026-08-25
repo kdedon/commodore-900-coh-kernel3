@@ -31,6 +31,11 @@ say "== kernel.stamp says  : ${KID:-<none>}"
 [ -z "$KID" ] || [ "$KID" = "$LIVE" ] || \
 	bad "kernel.out does not match its own stamp (published $KID, on disk $LIVE)"
 
+# Which compiler produced kobj/kernel.out, for the record: two compilers that
+# disagree about the frame layout produce objects that link without a word, so
+# the one that ran is worth naming beside the link ids.
+say "== kernel built with : $(prov_get "$KSTAMP" toolchain_id) (commit $(prov_get "$KSTAMP" toolchain | cut -c1-8))"
+
 DKID=$(prov_get "$DSTAMP" kernel_linkid)
 say "== build/drv linked vs: ${DKID:-<none>}"
 if [ -z "$DKID" ]; then

@@ -53,7 +53,7 @@ toolchain)
 			echo unknown
 		fi
 	}
-	HOW="  The toolchain is a repository of its own, and DEPS pins one of its
+	HOW="  The toolchain is a repository of its own, and DEPS names one of its
   RELEASES -- a checkout of it builds a compiler but not the five libc
   objects the kernel links by name, which come from the OS's libc:
       make deps DEP=toolchain

@@ -211,6 +211,7 @@ prov_write "$OBJ/kernel.stamp" kernel \
 	-- "linkid=$LINKID" "version=$VERSION" "ktty=${KTTY:-termio}" \
 	   "kddt=${KDDT:-}" "kmedia=$KMEDIA" "kmouse=$KMOUSE" \
 	   "toolchain=$(prov_get "$TCB/z8001/.provenance" commit)" \
+	   "toolchain_id=$(prov_get "$TCB/z8001/.provenance" tcid)" \
 	   "toolchain_dirtysrc=$(prov_get "$TCB/z8001/.provenance" dirtysrc)"
 for f in "$OBJ"/*; do
 	case "$f" in */kernel.out) continue;; esac

@@ -11,7 +11,7 @@ kernel headers, and host-side build tools.
 Building
 --------
 
-    make deps                 fetch the pinned toolchain and kboot inputs
+    make deps                 fetch the toolchain and kboot inputs
     make                      build the kernel
     make drivers              build the loadable console drivers
     make kernel-dist          create the kernel package
@@ -24,6 +24,10 @@ Building
 The kernel is written to `os/hostbuild/kobj/kernel.out`. Set
 `C900_TOOLCHAIN` or `C900_KBOOT` to use local checkouts instead of the inputs
 selected by `DEPS`.
+
+The compiler that produced a kernel is recorded in
+`os/hostbuild/kobj/kernel.stamp` and reported by `make check-stamps`. `DEPS`
+takes the toolchain's latest release; `make deps DEP=toolchain` fetches it.
 
 This repository builds kernel artifacts only. Disk images and userland are
 built in their respective repositories.

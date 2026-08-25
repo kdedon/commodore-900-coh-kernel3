@@ -22,9 +22,8 @@
 #              shape, so a developer with a checkout beside this one still
 #              builds against it by naming C900_TOOLCHAIN.
 #
-# The tag is a PIN.  It is bumped by hand, when this kernel wants what a newer
-# compiler emits; a floating edge would mean a kernel that links differently
-# tomorrow with nothing here changed.
+# The ref `latest' resolves to the newest published release, so a fetch takes
+# the current compiler.  A tag may be named in its place to take that one.
 
-toolchain  release  https://github.com/kdedon/commodore-900-toolchain  v0.1.3  c900-toolchain-@REF@-@HOST@  commodore-900-toolchain
+toolchain  release  https://github.com/kdedon/commodore-900-toolchain  latest  c900-toolchain-@REF@-@HOST@  commodore-900-toolchain
 kboot      git      https://github.com/kdedon/commodore-900-kboot      main

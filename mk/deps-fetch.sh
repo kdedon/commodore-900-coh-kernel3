@@ -43,6 +43,12 @@ fetch_git() {
 	git clone --branch "$3" "$2" "$4" || return 1
 }
 
+# The newest published release's tag, from the repository's release list.
+latest_tag() {
+	curl -fsL "https://api.github.com/repos/${1#https://github.com/}/releases/latest" |
+	sed -n 's/^[ \t]*"tag_name"[ \t]*:[ \t]*"\([^"]*\)".*/\1/p' | sed 1q
+}
+
 fetch_release() {
 	# $1 name  $2 url  $3 ref  $4 dest  $5 asset
 	if [ -d "$4" ]; then
@@ -50,6 +56,13 @@ fetch_release() {
 		return 0
 	fi
 	[ -n "$5" ] || { echo "$1: a release line needs an asset name" >&2; return 1; }
+	# `latest' names no tag, so the newest published one is asked for: the
+	# asset name and the download path both carry it.
+	if [ "$3" = latest ]; then
+		set -- "$1" "$2" "$(latest_tag "$2")" "$4" "$5"
+		[ -n "$3" ] || { echo "$1: no published release at $2" >&2; return 1; }
+		echo "$1: latest release is $3"
+	fi
 	# Resolve @HOST@ only for assets that use it.
 	case "$5" in
 	*@HOST@*)
@@ -72,8 +85,7 @@ fetch_release() {
 	if ! curl -fL --retry 2 -o "$tmp/$asset" "$from"; then
 		rm -rf "$tmp"
 		echo "$1: no release asset at $from" >&2
-		echo "  The tag in DEPS is the pin: it is deliberate and bumped by hand," >&2
-		echo "  so a missing one means that release has not been published yet." >&2
+		echo "  A missing asset means that release has not been published yet." >&2
 		echo "  Until it is, build the dependency yourself and name it by variable;" >&2
 		echo "  the resolver's refusal says which variable." >&2
 		return 1
