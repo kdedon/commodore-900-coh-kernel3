@@ -283,15 +283,21 @@ vmaps_:
 /   launch stub programs their bases and all six are described the same way.
 /   Segments past the image are simply mapped nowhere and never referenced.
 / Segments 36 and 37 are clist and buffer-mapped segments
+/ Segment 38 is the window system's shared tail, 28K, accessible to everyone
 / Segment 39 is the Western Digital Disc Mailbox and buffers
 / Segments 3A and 3B are accessible to everyone for the bitmap
 / Segments 3C, 3D, 3E are extra and overlay segments, full 64K, system only
 / Segment 3F stack is 2K, system only
-/ Other segments are CPU inhibited.
+/ Attributes, segments 0x30..0x3F: 0x02 is SYS (system-mode access only),
+/ 0x00 is a segment user code reaches.  GDS (0x38) and the two bitmap
+/ segments (0x3A, 0x3B) are the three the window system's clients address
+/ directly, so those three are the ones with no SYS bit.
 sattr:	.byte	0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02
-	.byte	0x04, 0x02, 0x00, 0x00, 0x02, 0x02, 0x02, 0x02
+	.byte	0x00, 0x02, 0x00, 0x00, 0x02, 0x02, 0x02, 0x02
+/ Limits, segments 0x31..0x3F, in 256-byte blocks, highest valid block.
+/ GDS is GDSSIZE (0x7000, machz8001.h) of card RAM: blocks 0x00..0x6F.
 slen:	.byte	      0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
-	.byte	0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x07
+	.byte	0x6F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x07
 	.even
 
 	.globl	u_

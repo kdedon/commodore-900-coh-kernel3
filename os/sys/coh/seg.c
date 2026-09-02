@@ -218,6 +218,12 @@ register SEG *sp;
 	register SEG *sp1;
 
 	if ((sp->s_flags&SFSHRX) != 0) {
+		/*
+		 * `s_urefc' is a char; refuse rather than wrap at the
+		 * 128th sharer (the caller fails the exec or fork).
+		 */
+		if (sp->s_urefc >= 127)
+			return (NULL);
 		sp->s_urefc++;
 		sp->s_lrefc++;
 		return (sp);

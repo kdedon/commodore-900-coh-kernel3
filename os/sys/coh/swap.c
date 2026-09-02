@@ -49,9 +49,10 @@ int	swap();
  * is what salloc(), seggrow() and segdupl() test before they will trade
  * memory for disk, so it is raised here rather than in the daemon: the
  * fallbacks must be live from the moment the process exists, not from the
- * first time it is scheduled.  Compaction (krunch) turns itself off against
- * the same flag -- the two are alternative answers to a fragmented segment
- * list, and only one may move a segment at a time.
+ * first time it is scheduled.  Compaction (krunch) runs alongside it: the two are
+ * both answers to a fragmented segment list, compaction being the cheaper
+ * one, and a segment held for I/O carries s_lrefc != s_urefc so only one of
+ * them moves any given segment.
  *
  * ORDERING.  This must run after the idle and init processes exist, and the
  * test below is the enforcement rather than a comment, because getting it

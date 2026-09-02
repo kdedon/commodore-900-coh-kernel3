@@ -74,8 +74,8 @@ struct tchars {
  * Overlying structure for ioctl.
  */
 union ioctl {
-	struct	sgttyb;
-	struct	tchars;
+	struct	sgttyb	io_sgttyb;
+	struct	tchars	io_tchars;
 };
 
 /*

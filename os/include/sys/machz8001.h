@@ -44,6 +44,18 @@
 #define	ISTVIRT		ADDR(USTACK+1, 0)
 #undef	SOVSIZE
 #define	SOVSIZE		64		/* Only needed for old compatibility */
+/* The u-area segment is UPASIZE bytes and holds TWO things, growing towards
+ * each other: the UPROC structure at offset 0 (<sys/uproc.h>), and this
+ * process's kernel stack, which md.s starts at u_+UPASIZE and grows down --
+ * with the trap register save area at the very top (`regl' below, and md.s's
+ * UPASIZE-46).  One salloc of UPASIZE per process serves both, so a bigger
+ * UPROC costs no memory at all; what it spends is stack headroom, which is
+ * UPASIZE - sizeof(UPROC) and nothing else.
+ *
+ * NUFILE (<sys/param.h>) is the term in sizeof(UPROC) that anyone is likely
+ * to want to change: u_filep[] is four bytes a descriptor.  At NUFILE 24 the
+ * structure is 624 bytes and 1424 are left to the stack.
+ */
 #undef	UPASIZE
 #define	UPASIZE		2048		/* Size of user area (md.s agrees) */
 #undef	MADSIZE
@@ -106,6 +118,7 @@
 #define	NKSEG	6		/* segments reserved to kernel text + data */
 #define	CLS	0x36		/* Clist mapping segment */
 #define	BFS	0x37		/* Buffer mapping segment */
+#define	GDS	0x38		/* Graphics display shared segment */
 #define	WDS	0x39		/* Western Digital hard disc segment */
 #define	BMS	0x3A		/* Bitmap segment 0, segment 1 is 0x3B */
 #define	DBS	0x3C		/* DDT segment - no one else touch */
@@ -115,6 +128,22 @@
 #define	USTACK	0x00		/* User stack */
 #define	USEG	0x03		/* Start of user segments */
 #define	BMPHYS	0x00FF0000L	/* Physical (paddr_t) of bitmap */
+
+/*
+ * GDS is the window system's shared tail: the drawing lock, the three system
+ * fonts, the cursor globals, the clip and surface descriptors, the selection
+ * and the event rings.  Every clgfx client maps it at offset 0 of segment
+ * 0x38 and reads and writes it directly, so it is one region shared by all of
+ * them and it is user-accessible.
+ *
+ * It is the card RAM past the visible bitmap.  The hi-res board decodes 128 KB
+ * at 0x3E0000 and the 1024x800 frame occupies the first 100 KB, leaving the
+ * 28 KB from GDSPHYS to the end of the board unread by the video hardware.
+ * GDSSIZE is the size the clients compile against (hr/include/shmem.h
+ * HRTAILSZ) and md.s gives the segment that limit.
+ */
+#define	GDSPHYS	0x003F9000L	/* Physical (paddr_t) of the shared tail */
+#define	GDSSIZE	0x7000		/* Bytes of it, to the end of the board */
 
 /*
  * Alloc definitions for the Z8000 (the 0.7.3 forms: mask the whole far

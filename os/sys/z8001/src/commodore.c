@@ -145,10 +145,14 @@ commodore()
 	corebot = bruc(p);
 	msize = btocrd(coretop-corebot);	/* KB (clicks are 1K) */
 	/*
-	 * Map the bit map
+	 * Map the bit map, and the window system's shared tail behind it.
+	 * md.s gives GDS its limit and its user attribute; the base is a
+	 * physical address, so it is programmed the way every other mapping
+	 * segment's is.
 	 */
 	pfix(BMS, BMPHYS);
 	pfix(BMS+1, BMPHYS+0x00010000L);
+	pfix(GDS, GDSPHYS);
 }
 
 /*
@@ -229,9 +233,10 @@ segload()
 	 * Rebuild it here.  This is the one place that runs in the resumed
 	 * process's own context with its own `u' mapped (dispatch() calls it
 	 * after conrest, and swap-in happens in the swapper's context, where
-	 * `u' is the swapper's).  Nothing moves while sexflag is clear --
-	 * krunch stands down against the same flag -- so a kernel built
-	 * without swapping pays nothing.
+	 * `u' is the swapper's).  Compaction moves memory under a stable
+	 * segment set in the same way, so this rebuild serves both it and the
+	 * swapper.  A kernel with no swap extent leaves sexflag clear and
+	 * pays nothing.
 	 */
 	if (sexflag != 0)
 		sproto();

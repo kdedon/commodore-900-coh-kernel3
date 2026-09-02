@@ -80,7 +80,19 @@ struct utsname *name;
 	kkcopy(SYS_SYSNAME, uts.sysname, sizeof(SYS_SYSNAME));
 	kkcopy(SYS_MACHINE, uts.machine, sizeof(SYS_MACHINE));
 	kkcopy(SYS_VERSION, uts.version, sizeof(SYS_VERSION));
-	for (cp = release, i = 0; *cp != '\0' && i < SYS_NMLN-1; i++, cp++)
+	/*
+	 * THE RELEASE, WITHOUT THE PROVENANCE.  release[] is what the boot
+	 * banner prints and carries the build's position as well as its name --
+	 * `1.0.0-g7c7ba66' -- but uts.release is SYS_NMLN bytes, and a release
+	 * copied blindly into it is CUT rather than refused: `1.0.0-g7' is not a
+	 * release, and reads as one.  So the copy stops at the `-' that begins
+	 * the suffix, and uname(2) reports the release the image IS.  Where the
+	 * build sits relative to it is provenance, and it survives where there
+	 * is room for it -- the banner, /etc/motd and the image stamp all carry
+	 * the whole string.
+	 */
+	for (cp = release, i = 0; *cp != '\0' && *cp != '-' && i < SYS_NMLN-1;
+	     i++, cp++)
 		;
 	kkcopy(release, uts.release, (unsigned)i);
 	kkcopy(unknown, uts.nodename, sizeof(unknown));

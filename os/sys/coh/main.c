@@ -63,6 +63,21 @@
 #error RELEASE not defined -- build via hostbuild/link-kernel.sh, or pass -DRELEASE=\"x.y.z\"
 #endif
 /*
+ * release[] is RELSZ bytes rather than the length of the literal, because the
+ * string an installed system shows is not this one.  What a login states is the
+ * release the IMAGE is, and the image is assembled long after this file is
+ * compiled: the distribution patches the staged copy of the kernel with it, the
+ * same way it patches rootdev, the drive parameters and the wd(4) table, so
+ * that naming a release costs no relink and no rebuild of the `ld -k' drivers
+ * bound to this kernel's addresses.  The literal below is what a kernel booted
+ * outside an image reports -- the state of the tree it was built from.
+ *
+ * The room is padding, so it must stay zero: the patcher reads the terminator
+ * and the zeros behind it as the space it has, and refuses a kernel whose
+ * release[] is not RELSZ bytes of exactly that shape.
+ */
+#define RELSZ	32
+/*
  * The contributors' copyright year, supplied by the build so it never goes
  * stale (hostbuild/link-kernel.sh passes -DCOPYYEAR).  The fallback is only
  * for a hand-built kernel.  It is a separate string rather than part of the
@@ -97,7 +112,7 @@ extern int ronflag;
 
 short n_atdr;
 char version[] = VERSION;
-char release[] = RELEASE;
+char release[RELSZ] = RELEASE;
 char copyright[] = "Copyright 1982,1992 Mark Williams Company\n";
 char copyyear[] = COPYYEAR;
 
