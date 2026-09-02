@@ -1,1 +1,7 @@
 os/hostbuild/version.sh export-subst
+
+# The Lexicon articles under os/man/ are third-party documents, rendered in
+# 1994 and staged verbatim.  They carry backspace overstrike, and they are not
+# this repository's text to normalise.
+os/man/COHERENT.1/** -text
+os/man/COHERENT.2/** -text

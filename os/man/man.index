@@ -1,0 +1,31 @@
+COHERENT.1/asy	asy	Device driver for asynchronous serial lines
+COHERENT.1/at	at	Drivers for hard-disk partitions
+COHERENT.1/boot.fha	boot.fha	Boot block for floppy disk
+COHERENT.1/clock	clock	Read the system clock
+COHERENT.1/cmos	cmos	Device for reading CMOS
+COHERENT.1/console	console	Console device driver
+COHERENT.1/ct	ct	Controlling terminal driver
+COHERENT.1/em87	em87	Perform/emulate hardware floating-point operations
+COHERENT.1/fd	fd	Floppy disk driver
+COHERENT.1/fl	fl	Floppy-disk driver
+COHERENT.1/ft	ft	Archive floppy-tape driver
+COHERENT.1/hai	hai	Host adapter-independent SCSI driver
+COHERENT.1/kb	kb	Non-configurable keyboard driver
+COHERENT.1/lp.d	lp	Driver for parallel ports
+COHERENT.2/mboot	mboot	Master boot block for hard disk
+COHERENT.2/mem	mem	Physical memory file
+COHERENT.2/msg	msg	Kernel module for messages
+COHERENT.2/nkb	nkb	Configurable device driver for console keyboard
+COHERENT.2/null.dev	null	The `bit bucket'
+COHERENT.2/ps.d	ps	Driver to return information about processes
+COHERENT.2/pty	pty	Device driver for pseudoterminals
+COHERENT.2/ram	ram	Driver for manipulating RAM
+COHERENT.2/sem	sem	Kernel module for semaphores
+COHERENT.2/sgtty	sgtty	General terminal interface
+COHERENT.2/shm	shm	Kernel module for shared memory
+COHERENT.2/stat	stat()	Find file attributes
+COHERENT.2/termio	termio	General terminal interface
+COHERENT.2/vtkb	vtkb	Non-configurable keyboard driver, virtual consoles
+COHERENT.2/vtnkb	vtnkb	Configurable keyboard driver, virtual consoles
+COHERENT.2/sload	sload	Load device driver
+COHERENT.2/suload	suload	Unload device driver

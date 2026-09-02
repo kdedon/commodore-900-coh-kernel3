@@ -6,7 +6,8 @@
 # VERSION defaults to hostbuild/VERSION, DESTDIR to hostbuild/build/dist.
 # Writes: c900-kernel-v<V>.tar.gz
 # Contents: drivers linked ld -k against this kernel (content-identified), symbol table,
-# headers, syscalls.tab, and check-stamps.sh (pairing gate for consumers).
+# headers, syscalls.tab, the manual pages for the drivers and system calls this
+# kernel owns, and check-stamps.sh (pairing gate for consumers).
 # Prereqs: make kernel drivers.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -69,6 +70,13 @@ done < "$W/headers"
 # published by the toolchain instead.  kheaders.py failing IS a failure, which
 # is why its exit status is checked above and not this number.
 echo "kernel headers: $n"
+
+# ---- the manual ----
+# The Lexicon articles for what this kernel owns: its device drivers, its kernel
+# modules, and the system calls no C library stub stands in front of.  Tracked
+# files copied whole, so an image builder staging a manual reads man/man.index
+# and man/COHERENT.[12] from an unpacked package exactly as from a checkout.
+cp -r "$OS/man" "$A/man"
 
 # ---- the syscall dispatch table, as data ----
 # Contract with C library stubs (in toolchain); extracted from trailing comments in tab.c.
