@@ -5,7 +5,6 @@
 #   make kernel-dist      package the kernel and drivers
 #   make kernel-headers   report the exported kernel headers
 #   make check-stamps     verify kernel/driver link IDs
-#   make check-shared     compare headers shared with the toolchain
 #   make deps             fetch inputs listed in DEPS
 #   make clean            remove build products
 
@@ -21,7 +20,7 @@ OS	:= $(HERE)/os
 HB	:= $(OS)/hostbuild
 
 .DEFAULT_GOAL := kernel
-.PHONY: all kernel drivers kernel-dist kernel-headers check-stamps check-shared \
+.PHONY: all kernel drivers kernel-dist kernel-headers check-stamps \
 	deps clean help
 
 all: kernel drivers
@@ -33,7 +32,6 @@ help:
 	  'make kernel-dist         package the kernel and drivers' \
 	  'make kernel-headers-dist package the exported headers' \
 	  'make check-stamps        verify kernel/driver link IDs' \
-	  'make check-shared        compare shared toolchain headers' \
 	  'make deps                fetch inputs listed in DEPS' \
 	  'make clean               remove build products'
 
@@ -88,12 +86,6 @@ $(DRIVERS) &: $(HB)/kobj/kernel.out $(HB)/build-drivers.sh $(DRVSRC) $(TCID)
 .PHONY: check-stamps
 check-stamps:
 	sh $(HB)/check-stamps.sh
-
-# The headers this repository and the toolchain BOTH compile are kept in both
-# trees on purpose; this is what makes that safe rather than a slow drift.
-.PHONY: check-shared
-check-shared:
-	sh $(HB)/check-shared-headers.sh
 
 # --- the packaged deliverable ---------------------------------------------
 kernel-dist: $(HB)/kobj/kernel.out $(DRIVERS)

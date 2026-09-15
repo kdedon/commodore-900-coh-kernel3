@@ -21,16 +21,16 @@ configuration compiles it.  A configuration switch (KTTY, KDDT, KMOUSE) must not
 change which headers a release carries, or two releases of one version would
 differ in their header set.
 
-Headers found OUTSIDE os/include are not part of the answer.  Three kinds turn
-up there and none of them ships:
+The closure ships whole, so a consumer who compiles a driver against a release
+needs the release and nothing else.  That includes the part of it the toolchain
+owns: those headers have one home, in the toolchain, and are COMPOSED into this
+package at pack time rather than kept in a second copy here.
 
-  toolchain src/include the C library's and the object formats' headers, and
-                        the COHERENT interfaces the userland compiles against
-                        too; the toolchain release publishes them
+These kinds turn up in the walk and do not ship:
+
   os/sys/z8001/h/*      shadowed copies -- os/include/sys and the toolchain's
                         headers both precede that directory on the kernel's -I
-                        path, so the compiler never reads them (romconf.h is
-                        the one exception, and it is kernel-private)
+                        path, so the compiler never reads them
   os/hrtty/h/*          the hi-res console driver's own headers, private to it
   build/gen/*           generated per build (wdbtab.h from a media descriptor,
                         sys/bootinfo.h staged from the kboot checkout)
@@ -172,21 +172,12 @@ def ships(path):
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else 'list'
     users = closure(sources())
-    # One destination, one file.  A header kept in BOTH trees is reached as
-    # itself from this repository and as itself from the toolchain, so the
-    # closure holds two absolute paths that package to one name.  The
-    # repository's own copy is the one that ships, because it is the one the
-    # kernel compiled: os/include precedes $TCINC on the kernel's -I path, so
-    # shipping the other would hand a consumer a header the kernel did not
-    # read.  check-shared-headers.sh is what keeps the two the same text; this
-    # is what makes the choice not depend on it.
+    # One destination, one file.  os/include and $TCINC hold disjoint names --
+    # each header has one home, in the repository that needs it -- so the
+    # closure reaches every shipped header by exactly one absolute path.
     bydest = {}
     for p in sorted(x for x in users if ships(x)):
-        d = shipdest(p)
-        if d not in bydest or p.startswith(os.path.join(OS, 'include') + os.sep):
-            if d in bydest and not p.startswith(os.path.join(OS, 'include') + os.sep):
-                continue
-            bydest[d] = p
+        bydest[shipdest(p)] = p
     keep = [bydest[d] for d in sorted(bydest)]
     for p in keep:
         rel = shipdest(p)
