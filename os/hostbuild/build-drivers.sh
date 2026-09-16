@@ -73,9 +73,32 @@ fail_drv() { name=$1
 	echo "  $name: FAIL (compile) -- $(grep -iE 'error|no match|Internal' "$LOG" | grep -v 'Strict\|Warning' | tail -1)"
 }
 
+# THE SOURCE MAP.  One row per driver linked: the driver's name, then every
+# path its bytes came out of, relative to os/ -- a directory names the whole of
+# it, licence text and makefile included.  Written beside the drivers as
+# build/.ulsrcmap, the path commodore-900-dist reads a producer's map from
+# and merges across every checkout it resolves, so a -src package for a driver
+# is cut from what this build compiled and never from a guess.  The common
+# tail is the recipe (this script) and the two header trees on every -I path
+# that this repository holds; the toolchain's system headers are the
+# toolchain's own include package.
+MAP="$OUT/.ulsrcmap.new"
+{
+	echo "# .ulsrcmap -- which sources each loadable driver is made of.  GENERATED"
+	echo "# by hostbuild/build-drivers.sh as it links them.  Paths are relative to"
+	echo "# os/, one driver per line.  Read by commodore-900-dist and by"
+	echo "# hostbuild/pack-component.sh to cut a component's -src package."
+} > "$MAP"
+map_drv() {	# map_drv <name> <os-relative source path>...
+	printf '%s' "$1" >> "$MAP"; shift
+	printf '\t%s' "$@" hostbuild/build-drivers.sh include sys/z8001/h >> "$MAP"
+	echo >> "$MAP"
+}
+
 # notty: serial console (major 8); alternatives are lrtty or hrtty for displays.
 if cc_one "$OS/sys/z8001/drv/notty.c"; then
 	link_drv notty "$OBJ/notty.o"
+	map_drv notty sys/z8001/drv/notty.c
 else
 	fail_drv notty
 fi
@@ -91,6 +114,7 @@ if cc_one "$OS/sys/z8001/rec/kv.c" &&
 then
 	link_drv lrtty "$OBJ/kv.o" "$OBJ/v0.o" "$OBJ/mm.o" "$OBJ/mmas.o" \
 		       "$OBJ/kb.o" "$OBJ/kbtab.o"
+	map_drv lrtty sys/z8001/rec
 else
 	fail_drv lrtty
 fi
@@ -110,22 +134,29 @@ then
 	link_drv hrtty "$OBJ/hrterm1.o" "$OBJ/hrterm2.o" "$OBJ/gall.o" \
 		       "$OBJ/scrollu.o" "$OBJ/subr.o" \
 		       "$OBJ/kb.o" "$OBJ/kv.o" "$OBJ/kbtab.o" "$OBJ/scroll.o"
+	map_drv hrtty hrtty
 else
 	fail_drv hrtty
 fi
 
-# hostfs is development-only; relink if present (ld -k bakes kernel addresses).
-[ -x "$HERE/build-hostfs.sh" ] && sh "$HERE/build-hostfs.sh" >/dev/null 2>&1
+# hostfs: the host-directory pass-through block driver (major 11), for
+# development dists.  Its client, hostfs(1), is the userland's.
+if cc_one "$OS/sys/drv/hostfs.c"; then
+	link_drv hostfs "$OBJ/hostfs.o"
+else
+	fail_drv hostfs
+fi
 
 echo "== drivers: $ok built, $fail failed"
 # Write pairing record only if all drivers linked (half-built build/drv is not paired).
 if [ "$fail" = 0 ]; then
 	prov_write "$OUT/.drvstamp" drivers \
 		os/sys/z8001/drv os/sys/z8001/rec \
-		os/hrtty os/hostbuild/build-drivers.sh \
+		os/hrtty os/sys/drv/hostfs.c os/hostbuild/build-drivers.sh \
 		-- "kernel_linkid=$KLINKID" \
 		   "drivers=$(cd "$OUT" && ls | grep -v '^\.' | tr '\n' ' ')"
 	echo "== drv stamp: kernel link id $KLINKID"
+	mv -f "$MAP" "$HERE/build/.ulsrcmap"
 	# The compiler contract, published beside the drivers it produced, so a
 	# loadable driver whose source lives in another repository is built with
 	# the settings THIS kernel was built with rather than with a copy of them
@@ -139,6 +170,6 @@ cdefs=$KDEFS
 ldflags=$DRVLDFLAGS
 EOF
 else
-	rm -f "$OUT/.drvstamp" "$OUT/.kdrv.conf"
+	rm -f "$OUT/.drvstamp" "$OUT/.kdrv.conf" "$MAP" "$HERE/build/.ulsrcmap"
 fi
 [ "$fail" = 0 ]

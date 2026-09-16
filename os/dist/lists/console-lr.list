@@ -1,0 +1,22 @@
+# console-lr.list -- the lo-res 6845 text console at major 8.
+#
+# /drv/lrtty is sys/z8001/rec/{kv,v0,mm,kb,kbtab}.c + mmas.s, ~9.5 KB.  Making it
+# loadable is what moved it out of kernel text.  vidsel selects it when the text
+# card's window at 0x370000 answers a write/read-back.
+#
+# rec/ really is the LO-RES driver, whatever its `kv' file names suggest:
+# rec/mm.c writes screen memory at 0x370000, and the files match the reference
+# tree's drv/lrtty/ copies.
+# PACKAGE.  See console-serial.list: a per-machine variant, not a choice.
+package  console-lr
+role     variant
+# KINDS -- see commodore-900-dist's os/dist/PACKAGE-FORMAT.  `bin' is the
+# list below; `src' is the complete corresponding source for every executable it
+# installs and `man' the pages for those programs.  Both refuse to be cut from a
+# guess.
+kinds    src man
+# A driver is documented under the device it provides, not under its file name:
+# console(1) is the console's escape sequences, kb(1) the keyboard it reads.
+articles lrtty console kb
+
+f	/drv/lrtty	755 0 1

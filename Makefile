@@ -1,8 +1,9 @@
 # COHERENT 3.x kernel for the Commodore 900 (Z8001).
 #
 #   make kernel           link the kernel (os/hostbuild/kobj/kernel.out)
-#   make drivers          loadable console drivers, bound to that kernel
+#   make drivers          loadable console and hostfs drivers, bound to that kernel
 #   make kernel-dist      package the kernel and drivers
+#   make packages         cut the console components as bin/src/man archives
 #   make kernel-headers   report the exported kernel headers
 #   make check-stamps     verify kernel/driver link IDs
 #   make deps             fetch inputs listed in DEPS
@@ -28,8 +29,11 @@ all: kernel drivers
 help:
 	@printf '%s\n' \
 	  'make                     build the kernel' \
-	  'make drivers             build the loadable console drivers' \
+	  'make drivers             build the loadable console and hostfs drivers' \
 	  'make kernel-dist         package the kernel and drivers' \
+	  'make packages            cut the console components (bin/src/man)' \
+	  'make package PKG=<c>     one component-kind: console-hr, console-hr-src, ...' \
+	  'make package-list        the components and their kinds' \
 	  'make kernel-headers-dist package the exported headers' \
 	  'make check-stamps        verify kernel/driver link IDs' \
 	  'make deps                fetch inputs listed in DEPS' \
@@ -38,7 +42,9 @@ help:
 # Info goals need no toolchain; everything else resolves it first.
 # kernel-headers is NOT here: the header set is the include closure, most of
 # which the toolchain publishes, so naming it needs the toolchain resolved.
-INFO_GOALS = help deps clean
+# The package goals compile nothing: they read build/drv and the map the driver
+# build wrote, and refuse when either is missing.
+INFO_GOALS = help deps clean packages package package-list
 ifeq (,$(filter $(MAKECMDGOALS),$(INFO_GOALS)))
 include $(HB)/toolchain.mk
 include $(HB)/kboot.mk
@@ -74,11 +80,13 @@ $(HB)/kobj/kernel.out: $(HB)/link-kernel.sh $(HB)/wdbtab-hd21.h $(KSRC) $(KVFILE
 	sh $(HB)/link-kernel.sh
 
 # --- drivers --------------------------------------------------------------
-DRIVERS = $(HB)/build/drv/notty $(HB)/build/drv/lrtty $(HB)/build/drv/hrtty
+DRIVERS = $(HB)/build/drv/notty $(HB)/build/drv/lrtty $(HB)/build/drv/hrtty \
+	  $(HB)/build/drv/hostfs
 drivers: $(DRIVERS)
-# One script builds all three; grouped to prevent concurrent invocation.
+# One script builds all four; grouped to prevent concurrent invocation.
 DRVSRC := $(shell find $(OS)/sys/z8001/drv $(OS)/sys/z8001/rec $(OS)/hrtty \
-	     \( -name '*.c' -o -name '*.h' -o -name '*.s' \) 2>/dev/null)
+	     \( -name '*.c' -o -name '*.h' -o -name '*.s' \) 2>/dev/null) \
+	  $(OS)/sys/drv/hostfs.c
 $(DRIVERS) &: $(HB)/kobj/kernel.out $(HB)/build-drivers.sh $(DRVSRC) $(TCID)
 	sh $(HB)/build-drivers.sh
 
@@ -98,6 +106,62 @@ kernel-headers:
 # against the kernel needs no kernel image.
 kernel-headers-dist:
 	sh $(HB)/pack-headers.sh $(KVERSION)
+
+# --- component packages -------------------------------------------------------
+# A component is an os/dist/lists/*.list carrying a `package' line -- the three
+# loadable console drivers, one each -- and it exports its runtime files, the
+# complete corresponding source for them and the Lexicon articles for them.  They
+# are cut here because the facts they need are here: which drivers were linked,
+# against which kernel (build/drv/.drvstamp), from which sources
+# (build/.ulsrcmap, written by build-drivers.sh as it links).
+#
+#   make packages                 cut every component-kind that can be cut
+#   make package PKG=console-hr   one -- `console-hr', `console-hr-src', `console-hr-man'
+#   make package-list             the components and their kinds
+#
+# The archives land in $(PKGOUT); the distribution repository collects them from
+# there and judges them (os/dist/check-package.sh) against the component-kind
+# declarations the userland publishes in dist/packages.  Each archive is judged
+# here first, by the packer that cut it, against its own manifest.tab, .contents
+# and .provenance; a cut that fails is removed and counted as refused, so a
+# package that does not match what it says it carries never leaves $(PKGOUT).
+# Each cut starts from an empty PKGOUT: pack-component.sh only ever adds
+# archives there, so one left from an earlier or dirty build would sit beside
+# the new cut and be just as collectible.
+PKGOUT ?= $(HB)/build/packages
+PACKCOMP = sh $(HB)/pack-component.sh
+.PHONY: packages package package-list
+package:
+	@test -n "$(PKG)" || { echo "usage: make package PKG=<component>[-src|-man]"; exit 2; }
+	$(PACKCOMP) -o $(PKGOUT) $(PKG)
+
+# Attempt every component kind, reporting each refusal by name.  A refusal is a
+# component that publishes nothing, so the sweep fails on one: an install set
+# short of a component is not an install set.
+packages:
+	@rm -rf $(PKGOUT); mkdir -p $(PKGOUT); ok=0; skip=0; \
+	$(PACKCOMP) components | awk '$$2 ~ /^bin/ {print $$1, $$2}' | \
+	while read -r n kinds; do \
+		for k in $$(echo "$$kinds" | tr ',' ' '); do \
+			if $(PACKCOMP) -o $(PKGOUT) "$$n" "$$k" 2>$(PKGOUT)/.why; \
+			then ok=$$((ok+1)); \
+			else skip=$$((skip+1)); \
+			   echo "-- $$n-$$k not cut: $$(head -2 $(PKGOUT)/.why | tr '\n' ' ')"; \
+			fi; \
+		done; \
+		echo "$$ok $$skip" > $(PKGOUT)/.count; \
+	done; rm -f $(PKGOUT)/.why; \
+	test -s $(PKGOUT)/.count || { \
+	    echo "== packages: no component kind was attempted" >&2; exit 1; }; \
+	read -r ok skip < $(PKGOUT)/.count; rm -f $(PKGOUT)/.count; \
+	echo "== packages: $$ok cut, $$skip refused, in $(PKGOUT)"; \
+	ls -1 $(PKGOUT)/*.tar.gz 2>/dev/null | wc -l | \
+	    xargs -I{} echo "== {} archive(s) present"; \
+	test "$$skip" -eq 0 || { \
+	    echo "== packages: $$skip component-kind(s) published nothing" >&2; exit 1; }
+
+package-list:
+	@$(PACKCOMP) components
 
 # --- dependencies ----------------------------------------------------------
 # DEP=<name> places just that edge; no DEP places every edge in DEPS.

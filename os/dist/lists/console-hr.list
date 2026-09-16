@@ -1,0 +1,22 @@
+# console-hr.list -- the hi-res bitmap console at major 8.
+#
+# /drv/hrtty is a DIFFERENT driver from the lo-res one, not a variant: hrterm1/2.c
+# are a bitmap terminal emulator, gall.c its font, scroll.s/scrollu.c the
+# framebuffer scroller (hrtty/src, ten objects, ~24 KB).  vidsel selects it
+# when the framebuffer at 0x3E0000 answers a write/read-back.
+#
+# The driver only.  hrglyph and hrlight, which probe the font bank and the
+# framebuffer, are test programs and ship from the userland's testing.list.
+# PACKAGE.  See console-serial.list: a per-machine variant, not a choice.
+package  console-hr
+role     variant
+# KINDS -- see commodore-900-dist's os/dist/PACKAGE-FORMAT.  `bin' is the
+# list below; `src' is the complete corresponding source for every executable it
+# installs and `man' the pages for those programs.  Both refuse to be cut from a
+# guess.
+kinds    src man
+# A driver is documented under the device it provides, not under its file name:
+# console(1) is the console's escape sequences, kb(1) the keyboard it reads.
+articles hrtty console kb
+
+f	/drv/hrtty	755 0 1

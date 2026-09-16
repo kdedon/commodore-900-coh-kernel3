@@ -1,0 +1,26 @@
+# licences.tab -- WHAT EACH COMPONENT THIS REPOSITORY CUTS IS DISTRIBUTED UNDER.
+#
+# The same register the userland keeps beside its lists (its dist/licences.tab
+# states the format at length); this one covers the three console drivers.
+# pack-component.sh cuts a package's LICENCES/ directory from it: index.tab is
+# the rows below that govern the component, and each governing text travels
+# verbatim under the regime's id.  Nothing here is legal advice.
+#
+#   lic  <id> <src> <notice> <ship> <text> <marker> <what...>
+#
+#	<src>	 must the corresponding source be shipped or offered?  y | n
+#	<notice> must the notice travel with the binaries?           y | n
+#	<ship>	 is redistribution under these terms settled?          y | ?
+#	<text>	 the licence text: `LICENSE' is this repository's own root
+#		 file, anything else a path relative to os/
+#	<marker> a word the text must contain, `.' standing for a space
+#
+#   use  <component> <id> [<why...>]
+
+lic mwc-bsd3  n y y LICENSE  Swartz       MWC COHERENT, BSD-3-Clause (Swartz, 2015): the driver sources, kernel headers and Lexicon articles
+lic mit-oc    n y y LICENSE  MIT.License  this repository's own work, MIT
+
+use console-hr      mwc-bsd3   hrtty/ is the 0.7.3-era hi-res terminal driver
+use console-lr      mwc-bsd3   sys/z8001/rec/ is the 0.7.3-era keyboard and text console driver
+use console-serial  mwc-bsd3   compiled against the MWC kernel headers, and documented by an MWC article
+use console-serial  mit-oc     sys/z8001/drv/notty.c is this project's redirect to the al line

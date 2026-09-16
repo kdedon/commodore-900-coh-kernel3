@@ -1,0 +1,24 @@
+# console-serial.list -- the serial console redirect at major 8.
+#
+# /drv/notty forwards the console to the first `al' serial line.  vidsel falls
+# back to this when no video board answers its probe, so EVERY dist must include
+# it (directly or via the userland's console-both.list): without it a machine
+# with no display has no console at all.
+# PACKAGE.  The console drivers are the one part of a dist chosen by which
+# MACHINE it is for, not by what an owner wants on it, so the role is
+# `variant': a channel does not offer these three as a choice.  They are cut
+# here because this repository links them: it knows which kernel they are bound
+# to (build/drv/.drvstamp), which sources they are compiled from
+# (build/.ulsrcmap) and which Lexicon articles describe them (man/).
+package  console-serial
+role     variant
+# KINDS -- see commodore-900-dist's os/dist/PACKAGE-FORMAT.  `bin' is the
+# list below; `src' is the complete corresponding source for every executable it
+# installs and `man' the pages for those programs.  Both refuse to be cut from a
+# guess.
+kinds    src man
+# A driver is documented under the device it provides, not under its file name:
+# console(1) is the console /drv/notty redirects.
+articles notty console
+
+f	/drv/notty	755 0 1

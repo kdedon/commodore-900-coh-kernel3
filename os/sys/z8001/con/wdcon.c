@@ -71,7 +71,8 @@ extern	CON	mscon[];		/* HR FN#7 Amiga mouse (/dev/mouse) */
  * samples its ports from a 100 Hz timeout(), and a timeout reaches neither the
  * text nor the data of a driver living in the transient driver window.
  *
- * Slot 11 is reserved for /drv/hostfs (dev dists only; sys/drv/hostfs.c). */
+ * Slot 11 is reserved for /drv/hostfs, the loadable block device served by a
+ * host program through a physical-memory mailbox (sys/drv/hostfs.c). */
 DRV drvl[16] ={
 	{nlcon},	{ctcon},	{wdcon},	{lpcon},
 	{NULL},		{alcon},	{NULL},		{MSDRV},

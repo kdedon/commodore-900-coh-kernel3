@@ -12,7 +12,7 @@
 /os/hostbuild/kobj/
 /os/hostbuild/kobj.*/
 
-# build-drivers.sh / build-hostfs.sh / pack-kernel.sh output, and the variant
+# build-drivers.sh / pack-kernel.sh output, and the variant
 # marker link-kernel.sh reads to tell a KTTY/KMEDIA/KMOUSE switch from a
 # no-op re-run.
 /os/hostbuild/build/

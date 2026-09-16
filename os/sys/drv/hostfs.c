@@ -1,13 +1,13 @@
 /*
  * hostfs -- paravirtual block device backed by a directory on the
- * simulator host (DEVELOPMENT DISTS ONLY; never shipped).
+ * machine that hosts the Z8001 (an optional development driver).
  *
  * The device is a plain COHERENT block device at major index 11, so a
  * host directory rendered as a filesystem image is mounted with the
  * ordinary mount(2) -- no filesystem switch, no change to fs*.c.  The
- * "controller" is the host daemon hostfsd (c900oses/gotools/cmd/hostfsd),
- * which serves block reads and writes out of that image over the
- * simulator's HTTP memory interface.
+ * "controller" is whatever host program serves the mailbox described
+ * below: any daemon that can read and write the guest's physical memory
+ * serves block reads and writes out of that image through it.
  *
  * The wire is a single 38-byte mailbox in this driver's data segment.
  * The daemon finds it by scanning physical memory for the magic string,
