@@ -20,26 +20,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { path: kernel3, fetch-depth: 0 }
-      - uses: actions/checkout@v4
-        with:
-          repository: kdedon/commodore-900-kboot
-          path: kboot
-          token: ${{ secrets.C900_CI_TOKEN || github.token }}
 
-      # A RELEASE of the toolchain, not a checkout of it.  The kernel links
-      # five libc objects by name (kobj/), and those are compiled from the
+      # RELEASES of the toolchain and of kboot, not checkouts of either.  The
+      # kernel links five libc objects by name (kobj/), compiled from the
       # OPERATING SYSTEM's libc -- source the toolchain repository does not
-      # hold.  `make all' in a toolchain checkout therefore builds a perfectly
-      # good compiler with no kobj beside it, and the link fails on the five
-      # files rather than on the missing edge.  The release archive carries
-      # them, so the pinned release is the edge; DEPS names the tag.
-      - name: The toolchain this kernel is built with
+      # hold -- so `make all' in a toolchain checkout builds a perfectly good
+      # compiler with no kobj beside it.  kboot's checkout carries a whole
+      # Z8001 program and its own tests, none of which a header consumer
+      # needs.  Both release archives carry exactly what this build consumes;
+      # DEPS names the tags.
+      - name: The toolchain and kboot header this kernel is built with
         working-directory: kernel3
         run: |
-          make deps DEP=toolchain
+          make deps
           # Which SHAPE resolved, in the log, beside the version: a release and
           # a checkout are both usable and they are not the same thing.
           sh mk/deps.sh -k toolchain
+          sh mk/deps.sh -k kboot
 
       # Set, never searched: a job that depended on directory adjacency breaks
       # the first time a runner image moves its checkouts.  The search itself
@@ -48,7 +45,7 @@ jobs:
         working-directory: kernel3
         env:
           C900_TOOLCHAIN: ${{ github.workspace }}/kernel3/deps/commodore-900-toolchain
-          C900_KBOOT: ${{ github.workspace }}/kboot
+          C900_KBOOT: ${{ github.workspace }}/kernel3/deps/commodore-900-kboot
         run: make kernel drivers
 
       # fetch-depth: 0 above is what makes this answerable -- version.sh reads

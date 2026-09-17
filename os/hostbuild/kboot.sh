@@ -1,34 +1,33 @@
-# kboot.sh -- resolve kboot (multiboot loader). SOURCE this file; do not exec.
-# kboot.mk is the make equivalent, searching the same paths.
+# kboot.sh -- resolve what a kernel build consumes from kboot. SOURCE this
+# file; do not exec. kboot.mk is the make equivalent, searching the same path.
 #
 # Sets $KB and defines bistage(). Requires $OS to name the os/ tree.
-# $C900_KBOOT: the checkout; defaults to sibling or repos/ directory.
-# include/bootinfo.h (loader->kernel handoff) is the kernel's compile dependency.
+# mk/deps.sh does the search (DEPS pinned): deps/ for the release, then a
+# checkout beside this repository, then repos/.  $C900_KBOOT unset = default
+# search; a value that does not resolve is refused as itself.
+# include/bootinfo.h (loader->kernel handoff) is the kernel's only compile
+# dependency on kboot -- the whole of what a release asset needs to carry.
 if [ -z "${OS:-}" ] || [ ! -d "$OS/include" ]; then
 	echo "kboot.sh: \$OS must name the os/ tree before sourcing" >&2
 	exit 2
 fi
 _kbroot=$(cd "$OS/.." && pwd)
-_kbsearch="$_kbroot/../commodore-900-kboot $_kbroot/repos/commodore-900-kboot"
-if [ -z "${C900_KBOOT:-}" ]; then
-	for _kbtry in $_kbsearch; do
-		[ -f "$_kbtry/include/bootinfo.h" ] || continue
-		C900_KBOOT=$_kbtry
-		break
-	done
-fi
-: "${C900_KBOOT:=}"
-if [ ! -f "$C900_KBOOT/include/bootinfo.h" ]; then
-	echo "$(basename "$0"): no kboot checkout at C900_KBOOT=$C900_KBOOT" \
-	     "(no include/bootinfo.h there).  Clone commodore-900-kboot to one" \
-	     "of: $_kbsearch -- or set C900_KBOOT to a checkout.  It owns" \
-	     "<sys/bootinfo.h>, which the wd(4) driver compiles." >&2
+_kbdeps="$_kbroot/mk/deps.sh"
+_kbfound=$(C900_KBOOT="${C900_KBOOT:-}" sh "$_kbdeps" kboot)
+if [ -z "$_kbfound" ]; then
+	C900_KBOOT="${C900_KBOOT:-}" sh "$_kbdeps" -n kboot "${C900_KBOOT:-}"
 	exit 2
 fi
-C900_KBOOT=$(cd "$C900_KBOOT" && pwd)
+C900_KBOOT=$(cd "$_kbfound" && pwd)
 KB="$C900_KBOOT"
 export C900_KBOOT
-unset _kbroot _kbsearch _kbtry
+C900_KB_SHAPE=$(C900_KBOOT="$C900_KBOOT" sh "$_kbdeps" -k kboot)
+if [ -z "${C900_KB_REPORTED:-}" ]; then
+	echo "kboot: $C900_KB_SHAPE at C900_KBOOT=$C900_KBOOT" >&2
+	C900_KB_REPORTED=1
+fi
+export C900_KB_SHAPE C900_KB_REPORTED
+unset _kbroot _kbdeps _kbfound
 
 # bistage <dir> -- stage bootinfo.h to <dir>/sys/bootinfo.h (to avoid shadowing).
 bistage() {

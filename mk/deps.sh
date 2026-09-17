@@ -61,17 +61,31 @@ toolchain)
 	;;
 kboot)
 	VAR="C900_KBOOT"
-	WANT="a kboot checkout"
-	LIST=$(siblings commodore-900-kboot)
+	WANT="kboot's include/bootinfo.h"
+	LIST="$root/deps/commodore-900-kboot $(siblings commodore-900-kboot)"
 	[ -n "$given" ] || given=${C900_KBOOT:-}
 	fixup() { echo "$1"; }
-	# include/bootinfo.h is the loader->kernel handoff contract.
+	# include/bootinfo.h is the loader->kernel handoff contract, the whole
+	# of what a KERNEL build consumes from kboot; both shapes carry it at
+	# the same path, so ok() does not need to tell them apart.
 	ok() { [ -f "$1/include/bootinfo.h" ]; }
-	HOW="  kboot is the multiboot loader, a repository of its own.  It owns
-  <sys/bootinfo.h>, which the wd(4) driver compiles, so a KERNEL build needs
-  the checkout (a userland or a stock image does not):
-      git clone <...>/commodore-900-kboot
-  or set C900_KBOOT= to a checkout."
+	# Two shapes: source checkout (has a Makefile of its own) or unpacked
+	# release (a header and a VERSION file, nothing to build).
+	shape() {
+		if [ -f "$1/Makefile" ]; then
+			echo checkout
+		elif [ -f "$1/VERSION" ]; then
+			echo "release $(sed -n 1p "$1/VERSION")"
+		else
+			echo unknown
+		fi
+	}
+	HOW="  kboot is the multiboot loader, a repository of its own.  DEPS names
+  one of its RELEASES -- the loader->kernel ABI header, which is all a
+  KERNEL build consumes (a userland or a stock image does not):
+      make deps DEP=kboot
+  or set C900_KBOOT= to that checkout or release, or to a full checkout of
+  commodore-900-kboot beside this repository."
 	;;
 *)
 	echo "deps.sh: unknown dependency \`$dep' (toolchain, kboot)" >&2

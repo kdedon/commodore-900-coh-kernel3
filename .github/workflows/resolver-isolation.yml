@@ -10,9 +10,8 @@
 #
 # So this job does the opposite, deliberately and alone: it checks out this
 # repository, runs `make deps' with no variables set, and builds.  Every
-# dependency has to be found by DEPS and the resolver -- the pinned toolchain
-# release unpacked into deps/, and kboot cloned beside the checkout -- or
-# nothing links.
+# dependency has to be found by DEPS and the resolver -- both pinned
+# releases, toolchain and kboot, unpacked into deps/ -- or nothing links.
 name: resolver-isolation
 
 on:
@@ -27,9 +26,10 @@ jobs:
   search:
     runs-on: ubuntu-latest
     steps:
-      # No `path:', so the checkout is the workspace itself and kboot is cloned
-      # beside it -- which is exactly the arrangement siblings() searches for,
-      # and the reason this job does not pass `path: kernel3' like the others.
+      # No `path:', so the checkout is the workspace itself and both releases
+      # land in deps/ beside it -- which is exactly the arrangement the
+      # resolver's own deps/ entry searches for, and the reason this job does
+      # not pass `path: kernel3' like the others.
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
 
@@ -42,7 +42,7 @@ jobs:
       - name: What the search found
         run: |
           echo "toolchain: $(sh mk/deps.sh -k toolchain) at $(sh mk/deps.sh toolchain)"
-          echo "kboot:     $(sh mk/deps.sh kboot)"
+          echo "kboot:     $(sh mk/deps.sh -k kboot) at $(sh mk/deps.sh kboot)"
 
       # The variables are unset for real: `env -u' rather than trusting that
       # nothing exported them, because a workflow-level env or a future step
