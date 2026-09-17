@@ -120,7 +120,7 @@ for b in l3tol ltol3 ltoc strcmp canon; do
 	if [ -r "$KOBJ/$b.o" ]; then
 		cp "$KOBJ/$b.o" "$OBJ/$b.o"
 	else
-		echo "klib FAIL: no $KOBJ/$b.o (toolchain: build libc, or unpack a release carrying native/kobj)" | tee -a "$LOG"
+		echo "klib FAIL: no $KOBJ/$b.o (toolchain: build libc, or unpack the libc or z8001 release, which carry lib/kobj)" | tee -a "$LOG"
 		fail=1
 	fi
 done
