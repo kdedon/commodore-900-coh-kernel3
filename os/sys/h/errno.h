@@ -61,6 +61,9 @@
 #define EDATTN	38		/* Device needs attention */
 #define	EDBUSY	39		/* Device busy */
 
+/* Follows the user <errno.h> network errnos 40..52. */
+#define	ENOSLIB	53		/* Cannot bind a shared library */
+
 #ifndef KERNEL
 /*
  * Globals used by programmes.

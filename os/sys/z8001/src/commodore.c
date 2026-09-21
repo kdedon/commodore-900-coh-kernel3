@@ -202,7 +202,7 @@ mproto()
 	for (i=SISTACK; i<=SIPDATA; i++) {
 		if ((sn = uproto(pp->p_segp[i], sn, i)) < 0)
 			return (0);
-#ifdef SISSLIB
+#ifdef SLIB073
 		/* Stack at USTACK; the shared library's two segments at
 		 * USTACK+1 and USTACK+2; the program's own text/data from USEG.
 		 * The library is LINKED for those numbers (slgen jumpbase, and
@@ -214,14 +214,68 @@ mproto()
 		else if (i == SIPSLIB)
 			sn = USEG;
 #else
-		/* No shared-library segment slots in this <sys/proc.h>: the
-		 * stack lives at USTACK and the user text/data start at USEG,
-		 * with nothing in between. */
+		/* The dynamic loader's libraries are placed by their own
+		 * numbers below, not by this running `sn': the stack lives at
+		 * USTACK and the user text/data start at USEG, with nothing in
+		 * between. */
 		if (i == SISTACK)
 			sn = USEG;
 #endif
 	}
+	/*
+	 * The shared libraries this process maps.  Placement is SYSTEM-WIDE --
+	 * library code carries its own segment numbers in its instructions, so
+	 * every client maps a given library at the pair it was relocated to at
+	 * first load -- and the loaded-library table is the only thing that
+	 * knows which pair that is (slsegof, shlib.c).  So these are mapped at
+	 * their own numbers, not at the next free one, and the map is sparse:
+	 * the gap between the program and the lowest library is left inhibited
+	 * by the loop above.
+	 *
+	 * uproto() refuses anything that would run past mp_hceil, which exec
+	 * set to the lowest of these, so a library descriptor cannot be
+	 * overwritten by data growth; a library is placed with the ceiling
+	 * ignored, since it IS the ceiling.
+	 */
+	for (i = 0; i < NSLIB; i++) {
+		if (pp->p_segp[SISLIB+2*i] == NULL)
+			continue;
+		if ((sn = slsegof(pp->p_segp[SISLIB+2*i])) < 0) {
+			u.u_error = ENOEXEC;
+			return (0);
+		}
+		u.u_sproto.mp_hceil = 0;
+		if (uproto(pp->p_segp[SISLIB+2*i], sn, SISLIB+2*i) < 0
+		 || uproto(pp->p_segp[SISLIB+2*i+1], sn+1, SISLIB+2*i+1) < 0) {
+			u.u_error = ENOMEM;
+			return (0);
+		}
+		u.u_sproto.mp_hceil = slceil0();
+	}
 	return (1);
+}
+
+/*
+ * The heap ceiling this process's libraries imply: the lowest library segment
+ * it maps.  mproto() drops the ceiling while it places a library (a library
+ * sits AT the ceiling, so the test would refuse it) and puts it back after.
+ */
+static
+slceil0()
+{
+	register PROC *pp;
+	register int i, s, c;
+
+	pp = SELF;
+	c = 0;
+	for (i = 0; i < NSLIB; i++) {
+		if (pp->p_segp[SISLIB+2*i] == NULL)
+			continue;
+		if ((s = slsegof(pp->p_segp[SISLIB+2*i])) > 0
+		 && (c == 0 || s < c))
+			c = s;
+	}
+	return (c);
 }
 
 /*
@@ -377,7 +431,7 @@ vaddr_t sp;
 	register PROC *pp;
 
 	pp = SELF;
-#ifdef SISSLIB
+#ifdef SLIB073
 	/* A shared-library process never runs: it holds the library segments
 	 * for its clients and nothing else, so suspend it here rather than
 	 * return to a user context it has no stack for. */

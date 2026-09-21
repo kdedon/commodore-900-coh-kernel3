@@ -80,7 +80,7 @@ for f in "$OS"/sys/coh/*.c; do
 done
 # --- MI leftovers hosted with the 0.7.3 headers ---
 # (conf.c/mdstub.c define 3.2-contract items -> 3.2 headers)
-for f in "$OS"/sys/z8001/src/conf.c "$OS"/sys/z8001/src/mdstub.c "$OS"/sys/z8001/src/pcopy.c "$OS"/sys/z8001/src/krunch.c "$OS"/sys/z8001/src/exec.c; do
+for f in "$OS"/sys/z8001/src/conf.c "$OS"/sys/z8001/src/mdstub.c "$OS"/sys/z8001/src/pcopy.c "$OS"/sys/z8001/src/krunch.c "$OS"/sys/z8001/src/exec.c "$OS"/sys/z8001/src/shlib.c; do
 	cc_one "$f" "$IMI" || { echo "conf compile FAIL: $f" | tee -a "$LOG"; fail=1; }
 done
 # KTTY=termio (default, 4.x with VMIN/VTIME) or sgtty (0.7.3, no pty support).

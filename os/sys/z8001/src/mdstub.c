@@ -230,6 +230,10 @@ SEG *sp;
 	 */
 	kclear((char *)&u, sizeof(UPROC));
 
+	/* The kernel stack grows down to UPROC. */
+	printf("u-area: %u of %u used, %u left for the kernel stack\n",
+		sizeof(UPROC), UPASIZE, UPASIZE-sizeof(UPROC));
+
 	/*
 	 * Allocate, record, initialize code segment, make it executable.
 	 */

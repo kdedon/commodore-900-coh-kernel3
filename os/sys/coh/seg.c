@@ -267,6 +267,21 @@ fsize_t n;
 		sp = sxalloc(n, f);
 		unlock(seglink);
 	}
+#ifdef Z8001
+	/*
+	 * P1: a shared library that no process is mapping stays resident, and
+	 * keeps its hardware segment pair, until memory is actually short --
+	 * which is here, and nowhere else.  slreclaim() gives back every
+	 * unlocked library (shared s_urefc == 1, the table's own reference)
+	 * and says whether it freed anything.
+	 */
+	if ( sp == NULL && slreclaim() != 0 ) {
+		krunch(1000);
+		lock(seglink);
+		sp = sxalloc(n, f);
+		unlock(seglink);
+	}
+#endif
 
 	if (sp != NULL) {
 		sp->s_flags = r;
@@ -855,7 +870,16 @@ sproto()
 			u.u_segl[n].sr_base = &u;
 		else
 			u.u_segl[n].sr_flag |= SRFPMAP;
-		if (n!=SISTEXT && n!=SISDATA)
+		/* Library segments are left out of the core dump: the shared
+		 * half is read-only text held in common, and dumping the
+		 * private half would change the layout of every core file a
+		 * client writes for memory it did not itself lay out.  Two
+		 * dumped segments, text and data, is what db(1) expects. */
+		if (n!=SISTEXT && n!=SISDATA
+#ifdef SISLIB
+		 && n<SISLIB
+#endif
+		 )
 			u.u_segl[n].sr_flag |= SRFDUMP;
 		/* SRFDATA is what iomapvp() accepts as a raw-I/O destination
 		 * (bio.c), so it must name only segments the process may be
