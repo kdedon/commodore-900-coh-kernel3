@@ -355,8 +355,21 @@ typedef	struct	mgen {
  */
 #define	NHUSEG	32				/* Segments for user */
 
+/*
+ * mp_nseg and mp_hceil are bytes (both are at most NHUSEG) so the two fit
+ * in the word mp_nseg used to fill: every u-area offset stays where ps(1),
+ * db(1) and the rest compiled against it expect.
+ *
+ * mp_hceil is the process's heap ceiling, the first hardware segment that
+ * uproto() may not map for a segment it places (the stack, text, and data
+ * that brk grows).  0 means NHUSEG.  exec resets it to 0; fork inherits it
+ * with the u-area.  The shared-library loader lowers it to the lowest
+ * library segment, so data growth fails with ENOMEM there instead of
+ * overwriting the library's descriptors.
+ */
 typedef	struct	mproto {
-	int	mp_nseg;			/* Number of active segments */
+	unsigned char	mp_nseg;		/* Descriptors loadmmu loads */
+	unsigned char	mp_hceil;		/* Heap ceiling; 0 = NHUSEG */
 	struct	hsegs	{
 		unsigned	mp_base;	/* Base of segment */
 		unsigned char	mp_len;		/* Length of segment */

@@ -32,6 +32,10 @@
 #include <romconf.h>
 #include <alloc.h>
 
+/* Z8010 descriptor attribute: CPU inhibit (uproto uses RD 0x01 and DIRW
+ * 0x20 from the same byte; md.s cseg fills the tail with this value). */
+#define	HA_CPUI	0x04
+
 struct	romconf	romconf;
 char	*_bvirt;
 
@@ -181,6 +185,19 @@ mproto()
 		}
 		return (1);
 	}
+	/*
+	 * Inhibit every descriptor first.  loadmmu loads 0..mp_nseg-1 from
+	 * here, and the map is sparse (nothing at USTACK+1..USEG-1 without a
+	 * shared library), so an entry uproto does not write would otherwise
+	 * load whatever it last held: zeroes from boot, which is a 256-byte
+	 * read-write window onto physical 0, or the previous image's
+	 * descriptors after exec or fork.
+	 */
+	for (i=0; i<NHUSEG; i++) {
+		u.u_sproto.mp_hsegs[i].mp_base = 0;
+		u.u_sproto.mp_hsegs[i].mp_len = 0;
+		u.u_sproto.mp_hsegs[i].mp_attr = HA_CPUI;
+	}
 	sn = USTACK;
 	for (i=SISTACK; i<=SIPDATA; i++) {
 		if ((sn = uproto(pp->p_segp[i], sn, i)) < 0)
@@ -283,10 +300,18 @@ int si;
 		base = ctob(hl);
 	}
 	b <<= CSH;
+	/*
+	 * Refuse before writing anything: the whole segment must fit below
+	 * the heap ceiling (see MPROTO).  This is where brk growth past it
+	 * fails.  A down segment is one hardware segment (l < MSSIZE-1).
+	 */
+	hl = u.u_sproto.mp_hceil;
+	if (hl == 0 || hl > NHUSEG)
+		hl = NHUSEG;
+	if (sn + (l+MSSIZE-1)/MSSIZE > hl)
+		return (-1);
 	u.u_segl[si].sr_base = ADDR(sn, base);
 	while (l > 0) {
-		if (sn >= NHUSEG)
-			return (-1);
 		if (l >= MSSIZE) {
 /*			printf("Large sproto, size=%u, sn=%d\n", l, sn); */
 			hl = 0xFF;		/* Full segment */

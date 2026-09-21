@@ -496,9 +496,14 @@ vaddr_t s2;
 		u.u_error = ENOMEM;
 		return;
 	}
-	if (sproto() == 0)
+	/* The memory is there but the map has no room for it (a Z8001 hit
+	 * the heap ceiling, say): put the old size back and say ENOMEM, as
+	 * for no memory at all. */
+	if (sproto() == 0) {
+		u.u_error = ENOMEM;
 		if (seggrow(sp, (fsize_t)s1)==0 || sproto()==0)
 			sendsig(SIGSEGV, SELF);
+	}
 	segload();
 }
 

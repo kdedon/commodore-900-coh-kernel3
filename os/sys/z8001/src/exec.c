@@ -145,6 +145,9 @@ char	*envp[];
 			pp->p_segp[i] = NULL;
 		}
 	}
+	/* The old image's libraries went with it, and so does the heap
+	 * ceiling they set: the new image starts at NHUSEG (see MPROTO). */
+	u.u_sproto.mp_hceil = 0;
 	sssp = ssp;
 	/*
 	 * Read in load module.

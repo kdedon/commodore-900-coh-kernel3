@@ -279,8 +279,14 @@ typedef	struct	mgen {
  */
 #define	NHUSEG	32				/* Segments for user */
 
+/*
+ * Two bytes share one word so u-area offsets match ps(1) and db(1).
+ * mp_hceil is the first segment uproto() may not map; the library loader
+ * lowers it so brk fails with ENOMEM instead of overwriting a library.
+ */
 typedef	struct	mproto {
-	int	mp_nseg;			/* Number of active segments */
+	unsigned char	mp_nseg;		/* Descriptors loadmmu loads */
+	unsigned char	mp_hceil;		/* Heap ceiling; 0 = NHUSEG */
 	struct	hsegs	{
 		unsigned	mp_base;	/* Base of segment */
 		unsigned char	mp_len;		/* Length of segment */
