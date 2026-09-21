@@ -32,8 +32,7 @@
 #include <romconf.h>
 #include <alloc.h>
 
-/* Z8010 descriptor attribute: CPU inhibit (uproto uses RD 0x01 and DIRW
- * 0x20 from the same byte; md.s cseg fills the tail with this value). */
+/* Z8010 descriptor attribute: CPU inhibit. */
 #define	HA_CPUI	0x04
 
 struct	romconf	romconf;
@@ -186,12 +185,8 @@ mproto()
 		return (1);
 	}
 	/*
-	 * Inhibit every descriptor first.  loadmmu loads 0..mp_nseg-1 from
-	 * here, and the map is sparse (nothing at USTACK+1..USEG-1 without a
-	 * shared library), so an entry uproto does not write would otherwise
-	 * load whatever it last held: zeroes from boot, which is a 256-byte
-	 * read-write window onto physical 0, or the previous image's
-	 * descriptors after exec or fork.
+	 * The map is sparse, so inhibit every descriptor first; a stale one
+	 * could expose physical 0 or the previous image.
 	 */
 	for (i=0; i<NHUSEG; i++) {
 		u.u_sproto.mp_hsegs[i].mp_base = 0;
@@ -202,40 +197,13 @@ mproto()
 	for (i=SISTACK; i<=SIPDATA; i++) {
 		if ((sn = uproto(pp->p_segp[i], sn, i)) < 0)
 			return (0);
-#ifdef SLIB073
-		/* Stack at USTACK; the shared library's two segments at
-		 * USTACK+1 and USTACK+2; the program's own text/data from USEG.
-		 * The library is LINKED for those numbers (slgen jumpbase, and
-		 * ld -R 0x01000000), so they are fixed, not just consecutive:
-		 * a client without a library leaves both slots NULL and uproto
-		 * skips them, leaving USTACK+1..USEG-1 unmapped. */
-		if (i == SISTACK)
-			sn = USTACK+1;
-		else if (i == SIPSLIB)
-			sn = USEG;
-#else
-		/* The dynamic loader's libraries are placed by their own
-		 * numbers below, not by this running `sn': the stack lives at
-		 * USTACK and the user text/data start at USEG, with nothing in
-		 * between. */
 		if (i == SISTACK)
 			sn = USEG;
-#endif
 	}
 	/*
-	 * The shared libraries this process maps.  Placement is SYSTEM-WIDE --
-	 * library code carries its own segment numbers in its instructions, so
-	 * every client maps a given library at the pair it was relocated to at
-	 * first load -- and the loaded-library table is the only thing that
-	 * knows which pair that is (slsegof, shlib.c).  So these are mapped at
-	 * their own numbers, not at the next free one, and the map is sparse:
-	 * the gap between the program and the lowest library is left inhibited
-	 * by the loop above.
-	 *
-	 * uproto() refuses anything that would run past mp_hceil, which exec
-	 * set to the lowest of these, so a library descriptor cannot be
-	 * overwritten by data growth; a library is placed with the ceiling
-	 * ignored, since it IS the ceiling.
+	 * Shared libraries map at the fixed pair they were relocated to.
+	 * The heap ceiling is dropped while placing each, since a library
+	 * sits at the ceiling.
 	 */
 	for (i = 0; i < NSLIB; i++) {
 		if (pp->p_segp[SISLIB+2*i] == NULL)
@@ -256,9 +224,7 @@ mproto()
 }
 
 /*
- * The heap ceiling this process's libraries imply: the lowest library segment
- * it maps.  mproto() drops the ceiling while it places a library (a library
- * sits AT the ceiling, so the test would refuse it) and puts it back after.
+ * The heap ceiling: the lowest library segment this process maps.
  */
 static
 slceil0()
@@ -354,11 +320,7 @@ int si;
 		base = ctob(hl);
 	}
 	b <<= CSH;
-	/*
-	 * Refuse before writing anything: the whole segment must fit below
-	 * the heap ceiling (see MPROTO).  This is where brk growth past it
-	 * fails.  A down segment is one hardware segment (l < MSSIZE-1).
-	 */
+	/* Refuse, before writing anything, a segment past the heap ceiling. */
 	hl = u.u_sproto.mp_hceil;
 	if (hl == 0 || hl > NHUSEG)
 		hl = NHUSEG;
@@ -420,26 +382,11 @@ saddr_t m;
 
 /*
  * Set up a new user process.
- * If this is a shared library, assume msetusr
- * is the last call in exec so that we can
- * suspend the process.
  */
 msetusr(pc, sp)
 vaddr_t pc;
 vaddr_t sp;
 {
-	register PROC *pp;
-
-	pp = SELF;
-#ifdef SLIB073
-	/* A shared-library process never runs: it holds the library segments
-	 * for its clients and nothing else, so suspend it here rather than
-	 * return to a user context it has no stack for. */
-	if ((pp->p_flags & PFSLIB) != 0) {
-		upause();
-		/* NOTREACHED */
-	}
-#endif
 	*((long *)(regl+OPC)) = pc;
 	if ((SELF->p_flags & PFKERN) != 0) {
 		regl[OFCW] |= MFSYS;

@@ -894,11 +894,7 @@ sproto()
 		 * list of excluded indices reaches, and uproto() maps exactly
 		 * the SFSHRX segments read-only. */
 		if (n!=SIUSERP && n!=SISTEXT && n!=SIPTEXT
-		 && (sp->s_flags&SFSHRX) == 0
-#ifdef SISSLIB
-		 && n!=SISSLIB
-#endif
-		 )
+		 && (sp->s_flags&SFSHRX) == 0)
 			u.u_segl[n].sr_flag |= SRFDATA;
 		u.u_segl[n].sr_size = sp->s_size;
 		u.u_segl[n].sr_segp = sp;

@@ -94,13 +94,8 @@
 #undef	MUERR
 #define	MUERR		ADDR(USTACK, 0xFFFE)	/* Location of `errno' */
 #define	MSSIZE		64			/* Maximum seg. size clicks */
-/* 3.2-contract compatibility for the 0.7.3 MD sources:
- *  - SIPSLIB: the NLD shared-library private slot shares index 3 with
- *    SIPTEXT (a process has one or the other);
- *  - PFSPROTO: "must recalculate segment prototype" -- 0.7.3's 04000
- *    bit is 3.2's PFWAKE, so it moves to the free 0x1000. */
+/* Must recalculate segment prototype. */
 #define	PFSPROTO	0x2000
-#define	PFSLIB	0x1000		/* NLD shared-library process (0.7.3 value) */
 #define	SIGEPA	12		/* extended-processor (EPU) trap signal (md.s) */
 #define	CSH		2			/* Shift saddr_t to hardware */
 
@@ -356,16 +351,9 @@ typedef	struct	mgen {
 #define	NHUSEG	32				/* Segments for user */
 
 /*
- * mp_nseg and mp_hceil are bytes (both are at most NHUSEG) so the two fit
- * in the word mp_nseg used to fill: every u-area offset stays where ps(1),
- * db(1) and the rest compiled against it expect.
- *
- * mp_hceil is the process's heap ceiling, the first hardware segment that
- * uproto() may not map for a segment it places (the stack, text, and data
- * that brk grows).  0 means NHUSEG.  exec resets it to 0; fork inherits it
- * with the u-area.  The shared-library loader lowers it to the lowest
- * library segment, so data growth fails with ENOMEM there instead of
- * overwriting the library's descriptors.
+ * Two bytes share one word so u-area offsets match ps(1) and db(1).
+ * mp_hceil is the first segment uproto() may not map; the library loader
+ * lowers it so brk fails with ENOMEM instead of overwriting a library.
  */
 typedef	struct	mproto {
 	unsigned char	mp_nseg;		/* Descriptors loadmmu loads */

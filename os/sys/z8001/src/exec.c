@@ -12,21 +12,8 @@
  * eveinit lives in mdstub.c; pload/puload (loadable-driver syscalls)
  * are deferred stubs there too.
  *
- * SHARED LIBRARIES.  A client carries LF_SLREF and, in its L_SYM section,
- * an LI_LIB record per library and an LI_IMP record per imported function.
- * shlib.c finds or loads each library, maps its segment pair into this
- * process and writes a far pointer to each export into the client's own
- * private data.  The ORDER matters: everything that can be refused happens
- * before the commit point below, where the old image is freed, because after
- * it a failure can only pexit(SIGSYS).
- *
- * The 0.7.3 facility this replaces -- a parked LF_SLIB process named by
- * `slprocp', at the fixed segments 1 and 2, reached through a jump table --
- * is still in the file below, under `#ifdef SLIB073'.  SLIB073 is defined
- * nowhere, so it is compiled out and the two cannot both be live; D12 deletes
- * it outright.  Its <sys/proc.h> slots SISSLIB/SIPSLIB are simply unused, and
- * an LF_SLIB image is refused as a program (it would otherwise be handed the
- * fixed-up shared segment by ssalloc's (s_ip, SFSHRX) match).
+ * Shared libraries are bound before the old image is freed, so any
+ * refusal can still return an errno.
  */
 #include <sys/coherent.h>
 #include <acct.h>
@@ -62,25 +49,11 @@
  * Segments.
  */
 #define upsp	pp->p_segp[SIUSERP]
-#define	lssp	pp->p_segp[SISSLIB]
-#define	lpsp	pp->p_segp[SIPSLIB]
 #define sssp	pp->p_segp[SISTACK]
 #define	sisp	pp->p_segp[SISTEXT]
 #define pisp	pp->p_segp[SIPTEXT]
 #define sdsp	pp->p_segp[SISDATA]
 #define pdsp	pp->p_segp[SIPDATA]
-
-/*
- * SISSLIB gates the whole shared-library facility: it exists only when
- * <sys/proc.h> carries the two library segment slots.  Until it does,
- * every block below compiles out and exec behaves as it does today.
- *
- * The one process holding the shared library image (proc.h declares it).
- * NULL until an LF_SLIB image is exec'd; pexit clears it again.
- */
-#ifdef SLIB073
-PROC	*slprocp;
-#endif
 
 /*
  * Given the name of an executable l.out, a null terminated argument
@@ -112,21 +85,11 @@ char	*envp[];
 	nlib = 0;
 	if ((ip=exlopen(np, lssize, &lflag, &pc)) == NULL)
 		return;
-	/*
-	 * Save the command name NOW.  Every library lookup goes through ftoi,
-	 * which rewrites u.u_direct, and u_comm is taken from it (V2 Q6).
-	 */
+	/* Library lookups overwrite u.u_direct, so save the name now. */
 	kkcopy(u.u_direct.d_name, cmd, sizeof(cmd));
-	/*
-	 * A library is not a program: it is linked at the nominal pair and
-	 * relocated by the loader, and ssalloc would hand an exec of it the
-	 * fixed-up shared segment the library table already owns.
-	 */
 	if ((lflag&LF_SLIB) != 0) {
 		printf("shlib: %s: a shared library is not a program\n", cmd);
-		u.u_error = ENOSLIB;	/* not ENOEXEC, and not EBADFMT: the
-					   file is intact, it is just not a
-					   program.  See shlib.c */
+		u.u_error = ENOSLIB;
 		idetach(ip);
 		return;
 	}
@@ -137,26 +100,6 @@ char	*envp[];
 			idetach(ip);
 			return;
 		}
-#ifdef SLIB073
-	} else if ((lflag&LF_SLIB) != 0) {
-		pp->p_flags |= PFSLIB|PFLOCK;
-		if (super() == 0) {
-			idetach(ip);
-			return;
-		}
-		if (slprocp != NULL) {
-			u.u_error = ENOEXEC;
-			idetach(ip);
-			return;
-		}
-	} else if ((lflag&LF_SLREF)!=0 && slprocp==NULL) {
-			/*
-			 * Perhaps should be made its own errno.
-			 */
-		u.u_error = ENOEXEC;
-		idetach(ip);
-		return;
-#endif
 	} else {
 		hialloc = 0;
 		if ((ssp = exstack(&sp, argp, envp)) == NULL) {
@@ -164,14 +107,8 @@ char	*envp[];
 			return;
 		}
 		/*
-		 * Bind the shared libraries BEFORE the commit point below.
-		 * Everything that can be refused -- a library that is not
-		 * there, one that is not a library, a symbol it does not
-		 * export, no free segment pair -- is refused here, where exec
-		 * can still return an errno to a process that is still
-		 * running its old image.  D10: LIBPATH is ignored when the
-		 * image is setuid or setgid, which is the whole of the
-		 * security model.
+		 * Bind libraries while exec can still fail cleanly.  LIBPATH
+		 * is ignored for setuid and setgid images.
 		 */
 		if ((lflag&LF_SLREF) != 0) {
 			nlib = slbind(ip, lssize,
@@ -198,17 +135,9 @@ char	*envp[];
 			pp->p_segp[i] = NULL;
 		}
 	}
-	/* The old image's libraries went with it, and so does the heap
-	 * ceiling they set: the new image starts at NHUSEG (see MPROTO). */
 	u.u_sproto.mp_hceil = 0;
 	sssp = ssp;
-	/*
-	 * The old image is gone; the libraries bound above are this process's
-	 * now.  They go in p_segp, and nowhere else, because fork, exit, exec,
-	 * swap-out and compaction walk p_segp and nothing else.  The heap
-	 * ceiling goes down to the lowest of them, so brk cannot grow into a
-	 * library (uproto, commodore.c).
-	 */
+	/* Fork, exit, swap and compaction find segments only in p_segp. */
 	for (i=0; i<nlib; ++i) {
 		pp->p_segp[SISLIB+2*i] = lseg[2*i];
 		pp->p_segp[SISLIB+2*i+1] = lseg[2*i+1];
@@ -265,38 +194,9 @@ char	*envp[];
 		if (r < 0)
 			goto out;
 	}
-#ifdef SLIB073
-	if ((lflag & LF_SLIB) != 0) {
-		if (sisp!=NULL || pisp!=NULL || sdsp==NULL) {
-			u.u_error = ENOEXEC;
-			goto out;
-		}
-		slprocp = pp;
-	} else if ((lflag & LF_SLREF) != 0) {
-		register PROC *slpp;
-
-		if ((slpp = slprocp) == NULL
-		 || (lssp = slpp->p_segp[SISDATA]) == NULL
-		 || (lssp = segdupl(lssp)) == NULL) {
-			u.u_error = ENOEXEC;
-			goto out;
-		}
-		if ((lpsp = slpp->p_segp[SIPDATA]) != NULL
-		 && (lpsp = segdupl(lpsp)) == NULL) {
-			u.u_error = ENOEXEC;
-			goto out;
-		}
-	}
-#endif
 	if (sproto() == 0)
 		goto out;
-	/*
-	 * The image is mapped, so the slots have addresses.  Writing them is
-	 * the one part of binding that happens after the commit point: every
-	 * symbol was resolved above, so the only way this fails is an I/O
-	 * error re-reading the symbol table, and that is SIGSYS like any
-	 * other I/O error here.
-	 */
+	/* Symbols are resolved; only an I/O error can fail this. */
 	if (nlib > 0 && slslots(ip, lssize, libl, nlib) == 0)
 		goto out;
 	/*
@@ -395,11 +295,7 @@ vaddr_t *pcp;
 		idetach(ip);
 		return (NULL);
 	}
-	/*
-	 * All NLSEG sizes, not just the NXSEG exec loads: the shared-library
-	 * binder needs l_ssize[L_DEBUG] and l_ssize[L_SYM] to find L_SYM in
-	 * the file (V2 Q6).  Every caller's array is [NLSEG].
-	 */
+	/* All NLSEG sizes: the library binder needs them to find L_SYM. */
 	kkcopy(ldp->l_ssize, ssizep, NLSEG*sizeof(fsize_t));
 	for (n=0; n<NLSEG; n++)
 		cansize(ssizep[n]);

@@ -94,7 +94,7 @@ int *selfp;
 		for (i = 0; i < NUSEG+1; i++) {
 			if (pp->p_segp[i] != sp)
 				continue;
-			if ((pp->p_flags&(PFLOCK|PFKERN|PFSWIO|PFSLIB)) != 0)
+			if ((pp->p_flags&(PFLOCK|PFKERN|PFSWIO)) != 0)
 				return (0);
 			if (pp == SELF) {
 				if (i == SIUSERP)
