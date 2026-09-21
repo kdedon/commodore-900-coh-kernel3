@@ -268,13 +268,7 @@ fsize_t n;
 		unlock(seglink);
 	}
 #ifdef Z8001
-	/*
-	 * P1: a shared library that no process is mapping stays resident, and
-	 * keeps its hardware segment pair, until memory is actually short --
-	 * which is here, and nowhere else.  slreclaim() gives back every
-	 * unlocked library (shared s_urefc == 1, the table's own reference)
-	 * and says whether it freed anything.
-	 */
+	/* Unused shared libraries stay resident until memory runs short. */
 	if ( sp == NULL && slreclaim() != 0 ) {
 		krunch(1000);
 		lock(seglink);
@@ -497,6 +491,26 @@ fsize_t n;
 }
 
 /*
+ * Would this process still fit in core if `sp' grew to `s' bytes?  If not,
+ * it would swap out and never swap back in.
+ */
+static
+segfits(sp, s)
+register SEG *sp;
+fsize_t s;
+{
+	register SEG *sp1;
+	register fsize_t t;
+	register int i;
+
+	t = s;
+	for (i = 0; i <= NUSEG; i++)
+		if ((sp1=SELF->p_segp[i]) != NULL && sp1 != sp)
+			t += sp1->s_size;
+	return (t <= (fsize_t)(coretop-corebot));
+}
+
+/*
  * Given a segment pointer, `sp' and a segment size, grow the given segment
  * to the given size.
  */
@@ -507,13 +521,15 @@ vaddr_t s2;
 	register vaddr_t s1;
 
 	s1 = (vaddr_t) sp->s_size;
+	if ((fsize_t)s2 > (fsize_t)s1 && segfits(sp, (fsize_t)s2) == 0) {
+		u.u_error = ENOMEM;
+		return;
+	}
 	if (seggrow(sp, (fsize_t)s2) == 0) {
 		u.u_error = ENOMEM;
 		return;
 	}
-	/* The memory is there but the map has no room for it (a Z8001 hit
-	 * the heap ceiling, say): put the old size back and say ENOMEM, as
-	 * for no memory at all. */
+	/* No room in the map (e.g. the heap ceiling): restore the old size. */
 	if (sproto() == 0) {
 		u.u_error = ENOMEM;
 		if (seggrow(sp, (fsize_t)s1)==0 || sproto()==0)
@@ -870,11 +886,7 @@ sproto()
 			u.u_segl[n].sr_base = &u;
 		else
 			u.u_segl[n].sr_flag |= SRFPMAP;
-		/* Library segments are left out of the core dump: the shared
-		 * half is read-only text held in common, and dumping the
-		 * private half would change the layout of every core file a
-		 * client writes for memory it did not itself lay out.  Two
-		 * dumped segments, text and data, is what db(1) expects. */
+		/* db(1) expects only text and data in a core dump. */
 		if (n!=SISTEXT && n!=SISDATA
 #ifdef SISLIB
 		 && n<SISLIB

@@ -1,15 +1,8 @@
 /*
- * hog.c -- memory pressure, so the shared-library cases can be run against a
- * system that is actually short of core.
+ * hog.c -- memory pressure for the shared-library cases.
  *
- * Takes 40000 bytes, fills it with a pattern keyed to its argument, sleeps
- * while the others do the same, and reads it back.  Enough of these together
- * ask for more than the machine has, so the swapper must put some out and
- * bring them back; a wrong pattern says the memory it was given back is not
- * the memory it had.
- *
- * An int here is 16 bits, so the size is asked for in two sbrk() calls and
- * the index is unsigned.
+ * Fills 40000 bytes with a pattern, sleeps, and checks it survived swapping.
+ * Ints are 16 bits, so it takes two sbrk() calls.
  *
  *	hog <n> <seconds>
  */
@@ -31,8 +24,8 @@ char *argv[];
 
 	n = argc > 1 ? atoi(argv[1]) : 1;
 	secs = argc > 2 ? atoi(argv[2]) : 8;
-	if ((p = sbrk(HOGHALF)) == (char *)-1
-	 || sbrk(HOGHALF) == (char *)-1) {
+	/* sbrk() fails with NULL here. */
+	if ((p = sbrk(HOGHALF)) == NULL || sbrk(HOGHALF) == NULL) {
 		printf("hog %d: no memory\n", n);
 		fflush(stdout);
 		return (1);
@@ -43,7 +36,6 @@ char *argv[];
 	k = n * 7 + 1;
 	for (i = 0; i < HOGSIZE; i++)
 		p[i] = (char)(i + k);
-	/* Failing here means the memory was never ours, not lost over a swap. */
 	for (i = 0; i < HOGSIZE; i++) {
 		if (p[i] != (char)(i + k)) {
 			printf("hog %d: BAD BEFORE at %u\n", n, i);
