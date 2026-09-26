@@ -51,10 +51,20 @@
 #include <sys/seg.h>
 
 /*
+ * The gaps between the RAM runs, held in the memory list so that no allocation
+ * can land in one.  Static: they exist before the arena does, and none of them
+ * is ever freed.
+ */
+static SEG	seghole[NRAMRUN-1];
+
+/*
  * Initialisation code.
  */
 seginit()
 {
+	register SEG *sp;
+	register int i;
+
 	/*
 	 * Create empty circular-list of memory segments.
 	 */
@@ -67,24 +77,27 @@ seginit()
 	segdq.s_forw = &segdq;
 	segdq.s_back = &segdq;
 
-	if ( holebot != holetop ) {
-		/*
-		 * Define the I/O mem hole between low memory and extended mem.
-		 * NOTE: Setting lrefc to urefc+1 stopx segment from moving.
-		 */
-		segiom.s_paddr = holebot;
-		segiom.s_size  = holetop - holebot;
-		segiom.s_flags = SFCORE | SFSYST;
-		segiom.s_urefc = 1;
-		segiom.s_lrefc = 2;
+	/*
+	 * Memory is a list of runs, not one range: what lies between two of
+	 * them answered the memory test but is not memory to allocate -- a
+	 * framebuffer, or what the loader kept back.  Each gap goes into the
+	 * memory list as a system segment, in ascending order like every other
+	 * member of it, and the allocators then step over it as they do over
+	 * any occupied segment.
+	 * NOTE: Setting lrefc to urefc+1 stops a segment from moving.
+	 */
+	for (i = 1; i < nramrun; i++) {
+		sp = &seghole[i-1];
+		sp->s_paddr = ramrun[i-1].ra_top;
+		sp->s_size  = ramrun[i].ra_bot - ramrun[i-1].ra_top;
+		sp->s_flags = SFCORE | SFSYST;
+		sp->s_urefc = 1;
+		sp->s_lrefc = 2;
 
-		/*
-		 * Insert I/O memory segment into memory list.
-		 */
-		segiom.s_forw = &segmq;
-		segiom.s_back = &segmq;
-		segmq.s_forw  = &segiom;
-		segmq.s_back  = &segiom;
+		sp->s_forw = &segmq;
+		sp->s_back = segmq.s_back;
+		segmq.s_back->s_forw = sp;
+		segmq.s_back = sp;
 	}
 
 	/*

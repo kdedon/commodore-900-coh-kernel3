@@ -17,12 +17,14 @@
 #              shape, so a developer with a checkout beside this one still
 #              builds against it by naming C900_TOOLCHAIN.
 #
-#   kboot      include/bootinfo.h, the loader->kernel handoff -- the whole of
-#              what a KERNEL build consumes from kboot.  Not a checkout: the
-#              loader is a Z8001 program with its own compiler and its own
-#              tests, none of which a header consumer needs, so kboot
-#              publishes the header alone as a release asset and the resolver
-#              reads either that or a full checkout beside this repository.
+#   kboot      include/bootinfo.h, the loader->kernel handoff, and
+#              include/memmap.h, which segments hold memory a system may
+#              allocate -- the whole of what a KERNEL build consumes from
+#              kboot.  Not a checkout: the loader is a Z8001 program with its
+#              own compiler and its own tests, none of which a header consumer
+#              needs, so kboot publishes the headers alone as a release asset
+#              and the resolver reads either that or a full checkout beside
+#              this repository.
 #
 # The ref `latest' resolves to the newest published release, so a fetch takes
 # the current compiler and the current header.  A tag may be named in its

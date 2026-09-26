@@ -95,6 +95,21 @@ extern	dev_t	 swapdev;		/* Swap device */
 extern	dev_t	 pipedev;		/* Pipe device */
 extern	paddr_t	 corebot;		/* Bottom of core */
 extern	paddr_t	 coretop;	 	/* Top of core */
+/*
+ * The memory there is, as a list of runs in ascending order: [ra_bot, ra_top)
+ * of each is memory to allocate, and what falls between two of them never is.
+ * Memory is not one range on every machine -- a framebuffer can answer a memory
+ * test from inside the range the machine reports -- so corebot and coretop are
+ * the ends of the list and not a span that is all memory.  The machine-
+ * dependent sizing code fills this in; seginit() pins the gaps.
+ */
+#define	NRAMRUN	8			/* runs the list holds */
+struct	ramrun {
+	paddr_t	ra_bot;
+	paddr_t	ra_top;
+};
+extern	struct ramrun ramrun[NRAMRUN];
+extern	int	 nramrun;		/* runs in use */
 extern	paddr_t	 holebot;		/* Bottom of I/O memory */
 extern	paddr_t	 holetop;		/* Top of I/O memory */
 extern	daddr_t	 swapbot;		/* Bottom of swap */

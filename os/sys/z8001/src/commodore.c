@@ -31,6 +31,8 @@
 #include <uproc.h>
 #include <romconf.h>
 #include <alloc.h>
+#include <sys/bootinfo.h>
+#include <sys/memmap.h>
 
 /* Z8010 descriptor attribute: CPU inhibit. */
 #define	HA_CPUI	0x04
@@ -85,6 +87,81 @@ hrreport()
 			hrvariant[hrmode & 3]);
 }
 
+extern struct bootinfo bootinfo;	/* the handoff block, defined with wd(4)'s
+					 * built-in partition table */
+
+static char	memmap[MM_NSEG];	/* 1: this segment is memory to allocate */
+static char	memsrc;			/* 1 the loader's map, 2 its map refused */
+static char	memcrowd;		/* runs dropped for want of slots */
+static unsigned	memover;		/* segments refused above the ceiling */
+
+/*
+ * Size memory as the LIST of runs it is, and set corebot/coretop to the lowest
+ * and highest addresses in it.  What lies between two runs is a framebuffer, or
+ * something the loader kept back, and seginit() pins it so that nothing is ever
+ * allocated there.
+ */
+static
+memsize()
+{
+	struct biram run[NRAMRUN];
+	unsigned bot;
+	unsigned top;
+	register int i;
+	int over;
+
+	/*
+	 * The ROM counts clicks, 64 of them to a segment.  Round the base up
+	 * and the top down: part of a segment is not a segment the memory test
+	 * proved.  Above MM_NSEG the MMU base arithmetic (btocrd() << CSH) no
+	 * longer fits a saddr_t, so memory there is refused rather than wrapped
+	 * onto memory that is in use; the motherboard decodes only to 0x3F.
+	 */
+	bot = (unsigned)((ctob((paddr_t)romconf.rom_bram) + 0xFFFFL) >> 16);
+	top = (unsigned)(ctob((paddr_t)romconf.rom_eram) >> 16);
+	if (top > MM_NSEG) {
+		memover = top - MM_NSEG;
+		top = MM_NSEG;
+	}
+	mmbuild(memmap, bot, top, romconf.rom_hires != 0);
+	/* A map the loader handed over wins, having subtracted what its own
+	 * configuration reserved as well; one that is not of this machine is
+	 * refused, and the map built here stands. */
+	if ((i = mmtake(&bootinfo, memmap)) != 0)
+		memsrc = i < 0 ? 2 : 1;
+	nramrun = mmruns(memmap, run, NRAMRUN, &over);
+	memcrowd = over;
+	if (nramrun == 0)
+		panic("No memory");
+	for (i = 0; i < nramrun; i++) {
+		ramrun[i].ra_bot = (paddr_t)run[i].br_first << 16;
+		ramrun[i].ra_top = ramrun[i].ra_bot
+				 + ((paddr_t)run[i].br_count << 16);
+	}
+	corebot = ramrun[0].ra_bot;
+	coretop = ramrun[nramrun-1].ra_top;
+}
+
+/*
+ * What memsize() made of memory.  It runs before a console has been chosen, so
+ * it records and this prints, as vidsel and hrreport() do.
+ */
+memreport()
+{
+	register int i;
+
+	printf("memory: %s map:", memsrc == 1 ? "loader's" : "built-in");
+	for (i = 0; i < nramrun; i++)
+		printf(" %X-%X", ramrun[i].ra_bot, ramrun[i].ra_top - 1);
+	printf("\n");
+	if (memsrc == 2)
+		printf("memory: the loader's map is not of this machine -- built-in used\n");
+	if (memover != 0)
+		printf("memory: %u segments refused above 16M\n", memover);
+	if (memcrowd != 0)
+		printf("memory: more runs than slots -- the high ones dropped\n");
+}
+
 /*
  * General initialisation.
  * Setup pointers to most data structures.
@@ -96,6 +173,8 @@ commodore()
 	register unsigned e;
 	register paddr_t et;
 	register char *t;
+	register int i;
+	paddr_t pb;
 
 	/*
 	 * Segment 1 is ROM DS.
@@ -105,8 +184,7 @@ commodore()
 	t = (char *)ADDR(1, 0);
 	t = *(int **)t;
 	kkcopy(t, &romconf, sizeof romconf);
-	corebot = romconf.rom_bram;		/* clicks here; bytes below */
-	coretop = ctob((paddr_t)romconf.rom_eram);	/* 3.2: paddr_t = BYTES */
+	memsize();
 	/*
 	 * Compute base of system (after Kernel Alloc Space).
 	 * This base is in physical memory.
@@ -119,7 +197,7 @@ commodore()
 	 * unsigned would report only the remainder past the last 64K boundary and
 	 * hand the whole of that memory out twice. */
 	et = ((paddr_t)(VSEG(&etext) - IS) << 16) + VOFF(&etext);
-	p1 = ctob((long)corebot);
+	p1 = corebot;			/* 3.2: paddr_t = BYTES */
 	/* Round the text size up to a click in LONG arithmetic.  bruc() adds
 	 * 1023, which overflows a 16-bit unsigned once the text passes 64512:
 	 * bruc() then yields 0 and every allocation below -- arena, inodes,
@@ -146,7 +224,14 @@ commodore()
 	 * starved smalloc's byte comparison to death (p2-p1 >= s).
 	 */
 	corebot = bruc(p);
-	msize = btocrd(coretop-corebot);	/* KB (clicks are 1K) */
+	/* Free memory is what the runs hold above the kernel, not the span from
+	 * corebot to coretop: the framebuffers lie inside that span. */
+	msize = 0;
+	for (i = 0; i < nramrun; i++) {
+		pb = ramrun[i].ra_bot < corebot ? corebot : ramrun[i].ra_bot;
+		if (pb < ramrun[i].ra_top)
+			msize += btocrd(ramrun[i].ra_top - pb);	/* KB */
+	}
 	/*
 	 * Map the bit map, and the window system's shared tail behind it.
 	 * md.s gives GDS its limit and its user attribute; the base is a

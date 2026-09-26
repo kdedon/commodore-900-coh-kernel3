@@ -84,6 +84,8 @@ char	 *idatap;			/* coherent.h */
 int	 idatas;			/* coherent.h */
 paddr_t	 corebot;			/* coherent.h */
 paddr_t	 coretop;			/* coherent.h */
+struct	 ramrun ramrun[NRAMRUN];	/* coherent.h */
+int	 nramrun;			/* coherent.h */
 paddr_t	 holebot;			/* coherent.h */
 paddr_t	 holetop;			/* coherent.h */
 paddr_t	 blockp;			/* coherent.h */

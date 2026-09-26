@@ -366,6 +366,7 @@ start:
 	call	lpclk			/ Initialise clock and LP
 
 	call	hrreport_		/ what vidsel found on the video board
+	call	memreport_		/ the memory map commodore_ settled on
 
 / Call main with interrupts on
 / When main returns, go into

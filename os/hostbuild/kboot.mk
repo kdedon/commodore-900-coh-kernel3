@@ -4,11 +4,12 @@
 # kboot is the multiboot loader the ROM loads and which then loads a kernel.
 # It is not part of this operating system: it boots COHERENT 3.5, CP/M-8000
 # and COHERENT 0.8 from one menu on one disk.  A KERNEL build consumes
-# exactly one thing from it -- include/bootinfo.h, the loader<->kernel
-# handoff -- and kboot publishes that header on its own as a release asset,
-# so this tree consumes one of two shapes: a source CHECKOUT (which has
-# everything else too) or an unpacked release archive (which has only the
-# header and a VERSION file).  mk/deps.sh's toolchain entry is the same
+# two things from it -- include/bootinfo.h, the loader<->kernel handoff, and
+# include/memmap.h, which segments hold memory a system may allocate -- and
+# kboot publishes those headers on their own as a release asset, so this tree
+# consumes one of two shapes: a source CHECKOUT (which has everything else
+# too) or an unpacked release archive (which has only the headers and a
+# VERSION file).  mk/deps.sh's toolchain entry is the same
 # pattern for the same reason; this mirrors it.
 #
 #   $(C900_KBOOT)  Unset, mk/deps.sh searches -- deps/ for the pinned
@@ -49,14 +50,14 @@ KBOOT_ERR = { echo "no kboot release or checkout resolved for C900_KBOOT=$(C900_
 	      echo "  It is the loader every bootable image stages as /coherent."; \
 	      exit 2; }
 
-# The handoff header the kernel compiles.  It belongs to the loader and this
-# tree keeps no copy of it: link-kernel.sh stages the resolved copy of it onto
-# the kernel's include path (kboot.sh bistage), so the two sides cannot hold
-# different definitions.  Named here so that editing the ABI relinks the
+# The headers the kernel compiles.  They belong to the loader and this tree
+# keeps no copy of them: link-kernel.sh stages the resolved copies onto the
+# kernel's include path (kboot.sh bistage), so the two sides cannot hold
+# different definitions.  Named here so that editing either one relinks the
 # kernel.  Empty with nothing resolved, and link-kernel.sh is then what
 # refuses -- a literal `/include/bootinfo.h' prerequisite would fail first and
 # say nothing.
-KBOOTBI := $(if $(KBOOT),$(KBOOT)/include/bootinfo.h)
+KBOOTBI := $(if $(KBOOT),$(KBOOT)/include/bootinfo.h $(KBOOT)/include/memmap.h)
 
 ifneq (,$(KBOOT))
 ifeq (,$(C900_KB_REPORTED))

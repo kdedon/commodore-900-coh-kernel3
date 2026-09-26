@@ -7,7 +7,7 @@
 #
 #   dep         variable          what it names
 #   toolchain   C900_TOOLCHAIN    the Z8001 cross toolchain
-#   kboot       C900_KBOOT        the kboot loader (include/bootinfo.h)
+#   kboot       C900_KBOOT        the kboot loader (its include/ headers)
 #
 # Search order: the variable wins; then a sibling checkout (at most three parents),
 # then repos/. Three parents reaches the enclosing workspace from <workspace>/repos/<repo>.
@@ -61,14 +61,17 @@ toolchain)
 	;;
 kboot)
 	VAR="C900_KBOOT"
-	WANT="kboot's include/bootinfo.h"
+	WANT="kboot's include/bootinfo.h and include/memmap.h"
 	LIST="$root/deps/commodore-900-kboot $(siblings commodore-900-kboot)"
 	[ -n "$given" ] || given=${C900_KBOOT:-}
 	fixup() { echo "$1"; }
-	# include/bootinfo.h is the loader->kernel handoff contract, the whole
-	# of what a KERNEL build consumes from kboot; both shapes carry it at
-	# the same path, so ok() does not need to tell them apart.
-	ok() { [ -f "$1/include/bootinfo.h" ]; }
+	# include/bootinfo.h is the loader->kernel handoff contract and
+	# include/memmap.h says which segments hold memory a system may
+	# allocate; together they are the whole of what a KERNEL build consumes
+	# from kboot.  Both shapes carry them at the same paths, so ok() does
+	# not need to tell them apart -- and a release too old to carry either
+	# one cannot build this kernel, so both are required to resolve.
+	ok() { [ -f "$1/include/bootinfo.h" ] && [ -f "$1/include/memmap.h" ]; }
 	# Two shapes: source checkout (has a Makefile of its own) or unpacked
 	# release (a header and a VERSION file, nothing to build).
 	shape() {

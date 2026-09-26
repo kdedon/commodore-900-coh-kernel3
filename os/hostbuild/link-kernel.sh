@@ -32,7 +32,7 @@ prov_header "toolchain" "$TCB/z8001/.provenance" || true
 
 # build/gen: generated headers (wd(4) table and loader handoff).
 # KMEDIA picks the built-in partition table (hd21 = real hardware, fallback for no-loader boots).
-# dist.py patches wdbtab_ for the actual media; only the loader's bootinfo.h is shared.
+# dist.py patches wdbtab_ for the actual media; only the loader's headers are shared.
 KMEDIA="${KMEDIA:-hd21}"
 mkdir -p "$HERE/build/gen"
 if [ "$KMEDIA" = hd21 ] && [ -r "$HERE/wdbtab-hd21.h" ]; then
@@ -44,7 +44,7 @@ else
 	exit 1
 fi
 bistage "$HERE/build/gen" ||
-	{ echo "cannot stage bootinfo.h from $KB"; exit 1; }
+	{ echo "cannot stage the loader's headers from $KB"; exit 1; }
 
 IMI="-I$HERE/build/gen -I$OS/include -I$OS/include/sys -I$TCINC -I$TCINC/sys -I$OS/sys/z8001/h"
 IMD="-I$HERE/build/gen -I$OS/sys/z8001/h -I$OS/sys/h -I$OS/include -I$OS/include/sys -I$TCINC -I$TCINC/sys"
@@ -101,7 +101,8 @@ done
 # the WD disk root, whose CON tables we compile: nl/ct/al/wd/lp/kv) ---
 [ -n "${KDDT:-}" ] && { cc_one "$OS/sys/z8001/src/ddt.c" "$IMD" ||
 	{ echo "ddt compile FAIL" | tee -a "$LOG"; fail=1; }; }
-for f in "$OS"/sys/z8001/src/commodore.c "$OS"/sys/z8001/src/console.c \
+for f in "$OS"/sys/z8001/src/commodore.c "$OS"/sys/z8001/src/memmap.c \
+	 "$OS"/sys/z8001/src/console.c \
 	 "$OS"/sys/z8001/src/trap.c \
 	 "$OS"/sys/z8001/src/tab.c \
 	 "$OS"/sys/z8001/drv/wd.c \

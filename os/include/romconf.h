@@ -21,11 +21,12 @@
  * in segment 0, contains the information.
  */
 struct	romconf	{
-	unsigned rom_bram;		/* Beginning of ram 512 byte click */
-	unsigned rom_eram;		/* End of ram in 512 byte clicks */
+	unsigned rom_bram;		/* Beginning of ram, 1 KB clicks */
+	unsigned rom_eram;		/* End of ram, 1 KB clicks */
 	char	*rom_auto;		/* Autoboot command (NULL is Q/A) */
 	int	*rom_restart;		/* Restart address */
 	char	rom_fdtype;		/* Type of floppy disc */
 	char	rom_hdtype;		/* Type of hard disc (0 = none) */
 	char	rom_ctype;		/* Clock types 0=4Mhz, 1=6Mhz */
+	char	rom_hires;		/* Non-zero: an HR video board is fitted */
 };

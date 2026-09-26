@@ -5,8 +5,9 @@
 # mk/deps.sh does the search (DEPS pinned): deps/ for the release, then a
 # checkout beside this repository, then repos/.  $C900_KBOOT unset = default
 # search; a value that does not resolve is refused as itself.
-# include/bootinfo.h (loader->kernel handoff) is the kernel's only compile
-# dependency on kboot -- the whole of what a release asset needs to carry.
+# include/bootinfo.h (loader->kernel handoff) and include/memmap.h (which
+# segments hold memory a system may allocate) are the kernel's only compile
+# dependencies on kboot -- the whole of what a release asset needs to carry.
 if [ -z "${OS:-}" ] || [ ! -d "$OS/include" ]; then
 	echo "kboot.sh: \$OS must name the os/ tree before sourcing" >&2
 	exit 2
@@ -29,9 +30,10 @@ fi
 export C900_KB_SHAPE C900_KB_REPORTED
 unset _kbroot _kbdeps _kbfound
 
-# bistage <dir> -- stage bootinfo.h to <dir>/sys/bootinfo.h (to avoid shadowing).
+# bistage <dir> -- stage the loader's headers under <dir>/sys (to avoid shadowing).
 bistage() {
 	mkdir -p "$1/sys" &&
-	cp -f "$KB/include/bootinfo.h" "$1/sys/bootinfo.h"
+	cp -f "$KB/include/bootinfo.h" "$1/sys/bootinfo.h" &&
+	cp -f "$KB/include/memmap.h" "$1/sys/memmap.h"
 }
 # end of kboot.sh
