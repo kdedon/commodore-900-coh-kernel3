@@ -14,42 +14,40 @@
 # bounds below are those, loosened by the sampling jitter of a 5-second
 # sample taken by a process that has to be woken to take it.
 #
-# Needs a relinked kernel in hostbuild/kobj/kernel.out and drivers in
-# hostbuild/build/drv rebuilt against it (ld -k bakes absolute kernel
-# addresses); the script checks the two stamps agree before booting.  The
-# kernel and the test program are injected into a COPY of the shipped image.
+# `ld -k' bakes absolute kernel addresses into the drivers, so the script
+# checks the kernel and driver stamps agree before booting.  The kernel and
+# the test program are put into a COPY of the test image.
 #
-#	sh run.sh		the gate
-#	KEEP=1 sh run.sh	leave the work directory
+#	sh run.sh				on hostbuild/kobj
+#	KERNEL=<kernel.out> DRV=<dir> sh run.sh	another kernel
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
-HB=$(cd "$HERE/../../hostbuild" && pwd)
 OS=$(cd "$HERE/../.." && pwd)
-. "$OS/hostbuild/toolchain.sh"	# sets $TC: the Z8001 toolchain checkout
-CCZ="$TC/ccz"
-DIST=${DIST:-extended-both}
-IMG=$HB/build/$DIST.bin
+UL=${C900_USERLAND:-$(cd "$OS/../.." && pwd)/commodore-900-coh-userland}
+TCD=${C900_TOOLCHAIN:-$(cd "$OS/../.." && pwd)/commodore-900-toolchain}
+CCZ=$TCD/host/ccz
+KERNEL=${KERNEL:-$OS/hostbuild/kobj/kernel.out}
+DRV=${DRV:-$OS/hostbuild/build/drv}
+IMG=${IMG:-$UL/hostbuild/build/test.bin}
+COHFS=$(sh "$UL/mk/deps.sh" tools)/bin/cohfs
 ROOTPART=${ROOTPART:-136}
-C900_ROOT=$(cd "$OS/.." && pwd)
-. "$C900_ROOT/mk/emulator.sh"
-emu_need "boot the target and run this gate"
 
 BAD=0
 fail() { echo "  FAIL $*"; BAD=$((BAD + 1)); }
 ok()   { echo "  ok   $*"; }
 
-for f in "$IMG" "$CCZ" "$HB/kobj/kernel.out"; do
+for f in "$CCZ" "$KERNEL" "$DRV/notty" "$DRV/lrtty" "$DRV/hrtty" "$IMG" \
+	 "$COHFS" "$UL/hostbuild/emu-run.sh"; do
 	[ -e "$f" ] || { echo "loadavg: missing $f -- cannot run" >&2; exit 2; }
 done
 
-WORK=${WORK:-$HERE/work}
-rm -rf "$WORK"; mkdir -p "$WORK"
-[ "${KEEP:-0}" = 1 ] || trap 'rm -rf "$WORK"' 0 1 2 15
+WORK=${WORK:-$(mktemp -d)}
+mkdir -p "$WORK"
 
 # ---------------------------------------------------------------- phase 0
 echo "phase 0: kernel and drivers were linked against each other"
-klink=$(sed -n 's/^linkid=//p' "$HB/kobj/kernel.stamp" 2>/dev/null)
-dlink=$(sed -n 's/^kernel_linkid=//p' "$HB/build/drv/.drvstamp" 2>/dev/null)
+klink=$(sed -n 's/^linkid=//p' "$(dirname "$KERNEL")/kernel.stamp" 2>/dev/null)
+dlink=$(sed -n 's/^kernel_linkid=//p' "$DRV/.drvstamp" 2>/dev/null)
 if [ -n "$klink" ] && [ "$klink" = "$dlink" ]; then
 	ok "kernel link id $klink, drivers built against $dlink"
 else
@@ -59,42 +57,40 @@ fi
 
 # ---------------------------------------------------------------- phase 1
 echo "phase 1: build loadavg and stage an image"
-if "$CCZ" -s -i -I "$OS/include" -I "$OS/include/sys" \
-	-o "$WORK/loadavg" "$HERE/loadavg.c" > "$WORK/cc.log" 2>&1; then
+if "$CCZ" -s -i -o "$WORK/loadavg" "$HERE/loadavg.c" > "$WORK/cc.log" 2>&1; then
 	ok "loadavg: $(wc -c < "$WORK/loadavg") B"
 else
 	fail "loadavg did not compile: $(tail -1 "$WORK/cc.log")"
 	echo "loadavg: cannot continue"; exit 1
 fi
-# Over /bin/banner: no new inode, no directory surgery, and banner is on no
-# path this test walks.
-cp --reflink=auto -f "$IMG" "$WORK/lav.bin" 2>/dev/null || cp -f "$IMG" "$WORK/lav.bin"
-set -- "$WORK/loadavg" /bin/banner "$HB/kobj/kernel.out" /coherent
-for d in notty lrtty hrtty; do
-	[ -f "$HB/build/drv/$d" ] && set -- "$@" "$HB/build/drv/$d" "/drv/$d"
-done
-python3 "$HERE/../rawalign/inject.py" "$WORK/lav.bin" "$ROOTPART" "$@" \
-	> "$WORK/inj.log" 2>&1 || { fail "inject into the test image"; exit 1; }
+cp -f "$IMG" "$WORK/lav.bin"
+put() { "$COHFS" put -p "$ROOTPART" -m 755 "$WORK/lav.bin" "$1" "$2" \
+	>> "$WORK/put.log" 2>&1 ||
+	{ fail "cannot put $2"; echo "loadavg: cannot continue"; exit 1; }; }
+put "$KERNEL" /coherent
+for d in notty lrtty hrtty; do put "$DRV/$d" "/drv/$d"; done
+put "$WORK/loadavg" /bin/loadavg
 ok "kernel, drivers and loadavg staged"
 
 # ---------------------------------------------------------------- phase 2
 echo "phase 2: 48 samples -- idle, 3 spinners for 140 s, idle again"
-echo "/bin/banner 5 48 3 4 32" > "$WORK/cmds"
-cp -f "$WORK/lav.bin" "$HB/build/loadavg-t.bin"
+# The multi-user boot leaves about 0.07 on the one-minute average; five
+# minutes decays it to zero.
+printf 'sleep 300\n/bin/loadavg 5 48 3 4 32\n' > "$WORK/cmds"
 # Every path is expanded into its own variable first: assignments in one
 # command prefix ARE visible to the later ones in the same prefix, so writing
 # WORK=$WORK/... ahead of OUT=$WORK/... would put the transcript inside the
 # image file.
 rwork=$WORK/work.bin; rout=$WORK/out; rerr=$WORK/err
 WORK=$rwork OUT=$rout ERR=$rerr \
-	sh "$HB/emu-run.sh" "$WORK/cmds" "loadavg-t" > "$WORK/harness" 2>&1
-rm -f "$HB/build/loadavg-t.bin"
+	sh "$UL/hostbuild/emu-run.sh" "$WORK/cmds" "$WORK/lav.bin" \
+	> "$WORK/harness" 2>&1
 if [ -s "$WORK/out" ]; then
 	ok "the run produced a transcript"
 else
 	fail "no transcript"; echo "loadavg: cannot continue"; exit 1
 fi
-grep '^loadavg:' "$WORK/out" | sed 's/^/       | /'
+grep -a '^loadavg:' "$WORK/out" | sed 's/^/       | /'
 
 # ---------------------------------------------------------------- phase 3
 # The samples, checked against the exponential the constants describe.
@@ -169,5 +165,5 @@ if [ "$BAD" = 0 ]; then
 	echo "         its stated time constant, and decays on the same one"
 	exit 0
 fi
-echo "loadavg: FAIL ($BAD)"
+echo "loadavg: FAIL ($BAD)  ($WORK)"
 exit 1

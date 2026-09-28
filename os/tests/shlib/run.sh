@@ -45,8 +45,8 @@ cclib() {	# cclib <name> <source> [<variant>] -- one library object
 	"$B/z8001/cc2-z8001" $PEEP "$WORK/$1.z1" "$WORK/$1.o" "$WORK/$1.scr" 0 \
 		>>"$LOG" 2>&1
 }
-mklib() {	# mklib <name> <exports> -- slgen one library from <name>.o
-	"$B/slgen" -A "$B/as-z8001" -L "$B/ld-z8001" -T "$WORK" -e "$2" \
+mklib() {	# mklib <name> -- slgen one library from <name>.o
+	"$B/slgen" -A "$B/as-z8001" -L "$B/ld-z8001" -T "$WORK" \
 		-o "$WORK/link/lib$1.1" "$WORK/$1.o" "$WORK/ss.o" \
 		>>"$LOG" 2>&1
 }
@@ -54,22 +54,21 @@ printf '\t.globl\tSS\nSS = 0\n' > "$WORK/ss.s"
 "$B/as-z8001" -o "$WORK/ss.o" "$WORK/ss.s" >>"$LOG" 2>&1 || die "SS"
 mkdir -p "$WORK/link"
 cclib toy "$HERE/toy.c" || die "the library did not compile"
-mklib toy "$HERE/toy.exp" || die "slgen refused the library"
+mklib toy || die "slgen refused the library"
 cclib toy2 "$HERE/toy2.c" || die "the second library did not compile"
-mklib toy2 "$HERE/toy2.exp" || die "slgen refused the second library"
+mklib toy2 || die "slgen refused the second library"
 # Eight one-function libraries, one over each limit of seven.
 i=1
 while [ $i -le 8 ]; do
 	printf 'int\ngen%s_add(a, b)\nint a, b;\n{\n\treturn (a + b + %s);\n}\n' \
 		$i $i > "$WORK/gen$i.c"
-	printf 'gen%s_add_\n' $i > "$WORK/gen$i.exp"
 	cclib "gen$i" "$WORK/gen$i.c" || die "gen$i did not compile"
-	mklib "gen$i" "$WORK/gen$i.exp" || die "slgen refused gen$i"
+	mklib "gen$i" || die "slgen refused gen$i"
 	i=$((i + 1))
 done
 # For the core-dump case: a marker in each half that must not reach a core.
 cat > "$WORK/mark.c" <<'EOF'
-char	mark_prv[] = "COREMARKPRV";
+char	__mark_prv[] = "COREMARKPRV";
 
 char *
 mark_shr()
@@ -84,13 +83,15 @@ int a, b;
 	return (a + b);
 }
 EOF
-printf 'mark_add_\nmark_shr_\n' > "$WORK/mark.exp"
 cclib mark "$WORK/mark.c" || die "the marker library did not compile"
-mklib mark "$WORK/mark.exp" || die "slgen refused the marker library"
-# Clients link against toy; the system gets a copy lacking toy_bump_.
+mklib mark || die "slgen refused the marker library"
+# Clients link against toy; the system gets a copy lacking toy_bump_, kept
+# from the exports by a leading `__'.
 cp "$WORK/link/libtoy.1" "$WORK/link/libskew.1"
-"$B/slgen" -A "$B/as-z8001" -L "$B/ld-z8001" -T "$WORK" -e "$HERE/toycut.exp" \
-	-o "$WORK/cut-libskew.1" "$WORK/toy.o" "$WORK/ss.o" >>"$LOG" 2>&1 ||
+sed 's/toy_bump/__toy_bump/g' "$HERE/toy.c" > "$WORK/toycut.c"
+cclib toycut "$WORK/toycut.c" || die "the cut library did not compile"
+"$B/slgen" -A "$B/as-z8001" -L "$B/ld-z8001" -T "$WORK" \
+	-o "$WORK/cut-libskew.1" "$WORK/toycut.o" "$WORK/ss.o" >>"$LOG" 2>&1 ||
 	die "slgen refused the cut library"
 cp "$WORK/link/libtoy.1" "$WORK/link/libgone.1"
 # Only LIBPATH finds this one.
@@ -99,21 +100,26 @@ cp "$WORK/link/libtoy.1" "$WORK/link/libpath.1"
 # --- the DATA library -------------------------------------------------------
 cclib toyd  "$HERE/toyd.c"  "$VARP" || die "the data library did not compile"
 cclib toydf "$HERE/toydf.c" "$VARP" || die "the data accessors did not compile"
-"$B/slgen" -A "$B/as-z8001" -L "$B/ld-z8001" -T "$WORK" -e "$HERE/toyd.exp" \
+"$B/slgen" -A "$B/as-z8001" -L "$B/ld-z8001" -T "$WORK" \
 	-o "$WORK/link/libtoyd.1" "$WORK/toyd.o" "$WORK/toydf.o" "$WORK/ss.o" \
 	>>"$LOG" 2>&1 || die "slgen refused the data library"
 # Cut to drop the struct export, and a copy only LIBPATH finds.
 cp "$WORK/link/libtoyd.1" "$WORK/link/libdpath.1"
 cp "$WORK/link/libtoyd.1" "$WORK/link/libdskew.1"
-"$B/slgen" -A "$B/as-z8001" -L "$B/ld-z8001" -T "$WORK" -e "$HERE/toydcut.exp" \
-	-o "$WORK/cut-libdskew.1" "$WORK/toyd.o" "$WORK/toydf.o" "$WORK/ss.o" \
+for f in toyd toydf; do
+	sed 's/toyd_box/__toyd_box/g' "$HERE/$f.c" > "$WORK/${f}cut.c"
+	cclib ${f}cut "$WORK/${f}cut.c" "$VARP" ||
+		die "the cut data library did not compile"
+done
+"$B/slgen" -A "$B/as-z8001" -L "$B/ld-z8001" -T "$WORK" \
+	-o "$WORK/cut-libdskew.1" "$WORK/toydcut.o" "$WORK/toydfcut.o" "$WORK/ss.o" \
 	>>"$LOG" 2>&1 || die "slgen refused the cut data library"
 
 # --- a library ON a library -------------------------------------------------
 # -S lets a library appear in a -r link.  The dependency goes last, where ld
 # treats it as an archive.
 cclib toyup "$HERE/toyup.c" "$VARP" || die "the importing library did not compile"
-"$B/slgen" -A "$B/as-z8001" -L "$B/ld-z8001" -T "$WORK" -e "$HERE/toyup.exp" \
+"$B/slgen" -A "$B/as-z8001" -L "$B/ld-z8001" -T "$WORK" \
 	-o "$WORK/link/libup.1" "$WORK/toyup.o" "$WORK/ss.o" \
 	"$WORK/link/libtoyd.1" >>"$LOG" 2>&1 ||
 	die "slgen refused the importing library"

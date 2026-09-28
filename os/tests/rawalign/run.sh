@@ -18,46 +18,40 @@
 # it back through the block device (the reference, since it cannot be wrong
 # in the way under test).
 #
-# Controls: offset 0 must pass whatever the driver does, and phase 2 runs the
-# identical commands against the SHIPPED image, whose kernel refuses the
-# transfer, requiring the misaligned cases to FAIL there.
+# Controls: offset 0 must pass whatever the driver does, and with CONTROL
+# naming a kernel that refuses the transfer, phase 2 runs the identical
+# commands against it, requiring the misaligned cases to FAIL there.
 #
-# Needs a relinked kernel in hostbuild/kobj/kernel.out and drivers in
-# hostbuild/build/drv rebuilt against it (ld -k bakes absolute kernel
-# addresses); the script checks the two stamps agree before booting.  The
-# kernel and the test program are injected into COPIES of the shipped image.
+# `ld -k' bakes absolute kernel addresses into the drivers, so the script
+# checks the kernel and driver stamps agree before booting.  The kernel and
+# the test program are put into COPIES of the test image.
 #
-#	sh run.sh		positive + negative control
-#	KEEP=1 sh run.sh	leave the work directory
+#	sh run.sh					on hostbuild/kobj
+#	KERNEL=<kernel.out> DRV=<dir> sh run.sh		another kernel
+#	CONTROL=<kernel.out> CONTROLDRV=<dir> sh run.sh	with the negative control
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
-HB=$(cd "$HERE/../../hostbuild" && pwd)
 OS=$(cd "$HERE/../.." && pwd)
-. "$OS/hostbuild/toolchain.sh"	# sets $TC: the Z8001 toolchain checkout
-CCZ="$TC/ccz"
-DIST=${DIST:-extended-both}
-IMG=$HB/build/$DIST.bin
+UL=${C900_USERLAND:-$(cd "$OS/../.." && pwd)/commodore-900-coh-userland}
+TCD=${C900_TOOLCHAIN:-$(cd "$OS/../.." && pwd)/commodore-900-toolchain}
+CCZ=$TCD/host/ccz
+KERNEL=${KERNEL:-$OS/hostbuild/kobj/kernel.out}
+DRV=${DRV:-$OS/hostbuild/build/drv}
+IMG=${IMG:-$UL/hostbuild/build/test.bin}
+COHFS=$(sh "$UL/mk/deps.sh" tools)/bin/cohfs
 ROOTPART=${ROOTPART:-136}
-# The emulator is resolved by mk/emulator.sh, the same search list that
-# mk/compiler.mk and the hostbuild harnesses use; $EMUBIN names one
-# explicitly.
-C900_ROOT=$(cd "$OS/.." && pwd)
-. "$C900_ROOT/mk/emulator.sh"
-emu_need "boot the target and run this gate"
-EMUBIN=$C900_EMU
 
 BAD=0
 fail() { echo "  FAIL $*"; BAD=$((BAD + 1)); }
 ok()   { echo "  ok   $*"; }
 
-for f in "$IMG" "$CCZ" "$HB/kobj/kernel.out"; do
+for f in "$CCZ" "$KERNEL" "$DRV/notty" "$DRV/lrtty" "$DRV/hrtty" "$IMG" \
+	 "$COHFS" "$UL/hostbuild/emu-run.sh"; do
 	[ -e "$f" ] || { echo "rawalign: missing $f -- cannot run" >&2; exit 2; }
 done
 
-WORK=${WORK:-$HERE/work}
-rm -rf "$WORK"
+WORK=${WORK:-$(mktemp -d)}
 mkdir -p "$WORK"
-[ "${KEEP:-0}" = 1 ] || trap 'rm -rf "$WORK"' 0 1 2 15
 
 # ---------------------------------------------------------------- phase 0
 # The drivers are linked against the kernel's absolute addresses.  A kernel
@@ -65,8 +59,8 @@ mkdir -p "$WORK"
 # that moved, which does not look like a stale build -- it looks like this
 # test's own I/O hanging.
 echo "phase 0: kernel and drivers were linked against each other"
-klink=$(sed -n 's/^linkid=//p' "$HB/kobj/kernel.stamp" 2>/dev/null)
-dlink=$(sed -n 's/^kernel_linkid=//p' "$HB/build/drv/.drvstamp" 2>/dev/null)
+klink=$(sed -n 's/^linkid=//p' "$(dirname "$KERNEL")/kernel.stamp" 2>/dev/null)
+dlink=$(sed -n 's/^kernel_linkid=//p' "$DRV/.drvstamp" 2>/dev/null)
 if [ -n "$klink" ] && [ "$klink" = "$dlink" ]; then
 	ok "kernel link id $klink, drivers built against $dlink"
 else
@@ -75,39 +69,48 @@ else
 fi
 
 # ---------------------------------------------------------------- phase 1
-echo "phase 1: build rawalign and stage two images"
-if "$CCZ" -s -i -I "$OS/include" -I "$OS/include/sys" \
-	-o "$WORK/rawalign" "$HERE/rawalign.c" > "$WORK/cc.log" 2>&1; then
+echo "phase 1: build rawalign and stage the images"
+if "$CCZ" -s -i -o "$WORK/rawalign" "$HERE/rawalign.c" > "$WORK/cc.log" 2>&1; then
 	ok "rawalign: $(wc -c < "$WORK/rawalign") B"
 else
 	fail "rawalign did not compile: $(tail -1 "$WORK/cc.log")"
 	echo "rawalign: cannot continue"; exit 1
 fi
-# The test program goes in over /bin/banner: this needs no new inode and no
-# directory surgery, and banner is on no path this test walks.
-cp --reflink=auto -f "$IMG" "$WORK/ctl.bin" 2>/dev/null || cp -f "$IMG" "$WORK/ctl.bin"
-cp --reflink=auto -f "$IMG" "$WORK/new.bin" 2>/dev/null || cp -f "$IMG" "$WORK/new.bin"
-python3 "$HERE/inject.py" "$WORK/ctl.bin" "$ROOTPART" \
-	"$WORK/rawalign" /bin/banner > "$WORK/inj.ctl.log" 2>&1 || {
-	fail "inject into the control image"; exit 1; }
-set -- "$WORK/rawalign" /bin/banner "$HB/kobj/kernel.out" /coherent
-for d in notty lrtty hrtty; do
-	[ -f "$HB/build/drv/$d" ] && set -- "$@" "$HB/build/drv/$d" "/drv/$d"
-done
-python3 "$HERE/inject.py" "$WORK/new.bin" "$ROOTPART" "$@" \
-	> "$WORK/inj.new.log" 2>&1 || { fail "inject into the test image"; exit 1; }
-ok "control = shipped kernel, test = kobj/kernel.out + drv"
+
+# stage <tag> <kernel> <drvdir> -- a copy of the image carrying the probe, a
+# kernel and its drivers.
+stage() {
+	cp -f "$IMG" "$WORK/$1.bin"
+	put() { "$COHFS" put -p "$ROOTPART" -m 755 "$WORK/$tag.bin" "$1" "$2" \
+		>> "$WORK/put.$tag.log" 2>&1; }
+	tag=$1
+	put "$WORK/rawalign" /bin/rawalign && put "$2" /coherent || return 1
+	for d in notty lrtty hrtty; do
+		[ -f "$3/$d" ] && { put "$3/$d" "/drv/$d" || return 1; }
+	done
+	return 0
+}
+stage new "$KERNEL" "$DRV" ||
+	{ fail "cannot stage the test image, see $WORK/put.new.log"; exit 1; }
+if [ -n "${CONTROL:-}" ]; then
+	stage ctl "$CONTROL" "${CONTROLDRV:-$DRV}" ||
+		{ fail "cannot stage the control image"; exit 1; }
+	ok "control = $CONTROL, test = $KERNEL + drv"
+else
+	ok "test = $KERNEL + drv; no CONTROL kernel, so no negative control"
+fi
 
 # ---------------------------------------------------------------- phase 2
-# hd4 is the root filesystem and hd3 is /tmp+swap, which single user has not
-# mounted -- so hd3 is where the write direction may land.  Reading hd4 raw
-# while it is mounted is fine; writing it would not be.
+# hd4 is the root filesystem and hd3 is /tmp+swap.  /tmp is unmounted first
+# so that the write direction may land on hd3; reading hd4 raw while it is
+# mounted is fine, writing it would not be.
 cat > "$WORK/cmds" <<'EOF'
-/bin/banner r /dev/rhd4 /dev/hd4 1 0
-/bin/banner r /dev/rhd4 /dev/hd4 4 1
-/bin/banner r /dev/rhd4 /dev/hd4 8 256
-/bin/banner w /dev/rhd3 /dev/hd3 4 3 77
-/bin/banner w /dev/rhd3 /dev/hd3 1 0 11
+/etc/umount /dev/hd3 && echo rawalign: umounted
+/bin/rawalign r /dev/rhd4 /dev/hd4 1 0
+/bin/rawalign r /dev/rhd4 /dev/hd4 4 1
+/bin/rawalign r /dev/rhd4 /dev/hd4 8 256
+/bin/rawalign w /dev/rhd3 /dev/hd3 4 3 77
+/bin/rawalign w /dev/rhd3 /dev/hd3 1 0 11
 EOF
 # Both writes start at block 0, so the order is load-bearing: the misaligned
 # one covers blocks 0..3 and the aligned one then takes block 0 back.  Phase 4
@@ -116,7 +119,6 @@ EOF
 
 run() {
 	tag=$1
-	cp -f "$WORK/$tag.bin" "$HB/build/rawalign-$tag.bin"
 	# Expand every path here, into its own variable: assignments in one
 	# command prefix ARE visible to the later ones in the same prefix, so
 	# writing WORK=$WORK/... ahead of OUT=$WORK/... would make OUT a path
@@ -124,51 +126,55 @@ run() {
 	rwork=$WORK/work.$tag.bin; rout=$WORK/$tag.out; rerr=$WORK/$tag.err
 	rcmds=$WORK/cmds; rharn=$WORK/$tag.harness
 	WORK=$rwork OUT=$rout ERR=$rerr \
-		sh "$HB/emu-run.sh" "$rcmds" "rawalign-$tag" > "$rharn" 2>&1
-	rm -f "$HB/build/rawalign-$tag.bin"
-	[ -s "$WORK/$tag.out" ]
+		sh "$UL/hostbuild/emu-run.sh" "$rcmds" "$WORK/$tag.bin" \
+		> "$rharn" 2>&1
+	[ -s "$WORK/$tag.out" ] || return 1
+	grep -a -q 'rawalign: umounted' "$WORK/$tag.out" ||
+		{ fail "$tag: /tmp would not unmount"; return 1; }
 }
 
 # matches <tag> -- how many of the five invocations reported a byte-for-byte
 # match.  The two aligned ones are expected to match on both images, so a run
 # that boots at all scores at least 2.
-matches() { grep -c 'rawalign: MATCH' "$WORK/$1.out"; }
+matches() { grep -a -c 'rawalign: MATCH' "$WORK/$1.out"; }
 
-echo "phase 2: the shipped kernel refuses the misaligned transfers"
-if run ctl; then
-	m=$(matches ctl)
-	if [ "$m" = 2 ]; then
-		ok "only the two aligned transfers succeeded"
+if [ -n "${CONTROL:-}" ]; then
+	echo "phase 2: the control kernel refuses the misaligned transfers"
+	if run ctl; then
+		m=$(matches ctl)
+		if [ "$m" = 2 ]; then
+			ok "only the two aligned transfers succeeded"
+		else
+			fail "$m of 5 matched on the control -- expected the 2 aligned ones"
+			grep -a rawalign "$WORK/ctl.out" | sed 's/^/       | /'
+		fi
+		if grep -a -q 'non-aligned dma in RAW mode' "$WORK/ctl.out"; then
+			ok "the driver said so: non-aligned dma in RAW mode"
+		else
+			fail "the control did not refuse -- these assertions measure nothing"
+		fi
 	else
-		fail "$m of 5 matched on the control -- expected the 2 aligned ones"
-		grep rawalign "$WORK/ctl.out" | sed 's/^/       | /'
+		fail "the control run produced no usable transcript"
 	fi
-	if grep -q 'non-aligned dma in RAW mode' "$WORK/ctl.out"; then
-		ok "the driver said so: non-aligned dma in RAW mode"
-	else
-		fail "the control did not refuse -- these assertions measure nothing"
-	fi
-else
-	fail "the control run produced no transcript"
 fi
 
 # ---------------------------------------------------------------- phase 3
-echo "phase 3: the relinked kernel bounces them, and the bytes agree"
+echo "phase 3: the kernel under test bounces them, and the bytes agree"
 if run new; then
 	m=$(matches new)
 	if [ "$m" = 5 ]; then
 		ok "all 5 transfers matched byte for byte (1, 4 and 8 sectors)"
 	else
 		fail "only $m of 5 matched"
-		grep rawalign "$WORK/new.out" | sed 's/^/       | /'
+		grep -a rawalign "$WORK/new.out" | sed 's/^/       | /'
 	fi
-	if grep -q 'non-aligned dma in RAW mode' "$WORK/new.out"; then
+	if grep -a -q 'non-aligned dma in RAW mode' "$WORK/new.out"; then
 		fail "the driver still refused a transfer"
 	else
 		ok "no transfer was refused"
 	fi
 else
-	fail "the test run produced no transcript"
+	fail "the test run produced no usable transcript"
 fi
 
 # ---------------------------------------------------------------- phase 4
@@ -177,10 +183,16 @@ fi
 # HOST and predicts every byte of the pattern from the seed alone, so it does
 # not take the guest's word for anything.
 echo "phase 4: the pattern is on the disk, checked on the host"
-if [ -s "$WORK/work.new.bin" ] && [ -s "$WORK/work.ctl.bin" ]; then
-	seen=$(python3 - "$WORK/work.new.bin" "$WORK/work.ctl.bin" <<'PY'
+set -- "$WORK/work.new.bin"
+want=11
+if [ -n "${CONTROL:-}" ]; then
+	set -- "$@" "$WORK/work.ctl.bin"
+	want=1110
+fi
+if [ -s "$1" ]; then
+	seen=$(python3 - "$@" <<'PY'
 import sys
-BASE = 31008 * 512      # /dev/hd3 on hd42-coh.media
+BASE = 31008 * 512      # /dev/hd3 on the test image
 seed11 = bytes((11 + i * 7) & 0xFF for i in range(512))
 seed77 = bytes((77 + i * 7) & 0xFF for i in range(2048))
 out = []
@@ -193,14 +205,14 @@ PY
 )
 	# new: aligned landed, misaligned landed.  ctl: aligned landed, misaligned
 	# refused and so absent -- which is what licenses reading the other three.
-	case "$seen" in
-	1110)	ok "the misaligned pattern is on the disk, and only on the disk"
-		ok "  the fixed kernel wrote; the control image does not carry it"
-		;;
-	*)	fail "host check of /dev/hd3 gave $seen, expected 1110"
-		fail "  (new aligned, new misaligned, ctl aligned, ctl misaligned)"
-		;;
-	esac
+	if [ "$seen" = "$want" ]; then
+		ok "the misaligned pattern is on the disk"
+		[ -n "${CONTROL:-}" ] &&
+			ok "  the fixed kernel wrote; the control image does not carry it"
+	else
+		fail "host check of /dev/hd3 gave $seen, expected $want"
+		fail "  (new aligned, new misaligned[, ctl aligned, ctl misaligned])"
+	fi
 else
 	fail "phase 3 left no image to inspect"
 fi
@@ -208,9 +220,8 @@ fi
 echo
 if [ "$BAD" = 0 ]; then
 	echo "rawalign: PASS -- misaligned raw reads and writes transfer the right"
-	echo "          bytes, and the same checks demonstrably fail on the kernel"
-	echo "          that refuses them"
+	echo "          bytes  ($WORK)"
 	exit 0
 fi
-echo "rawalign: FAIL ($BAD)"
+echo "rawalign: FAIL ($BAD)  ($WORK)"
 exit 1

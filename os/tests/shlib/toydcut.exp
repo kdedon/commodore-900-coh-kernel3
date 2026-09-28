@@ -1,8 +1,0 @@
-# toyd.exp without toyd_box_, a data export its clients still import.
-toyd_arr_	data
-toyd_tab_	shrd
-toyd_rsum_
-toyd_rwhere_
-toyd_set_
-toyd_sum_
-toyd_where_
