@@ -181,7 +181,7 @@ register INODE *ip;
 		break;
 	case IPW:
 		++ip->i_paw;
-		if ( !ip->i_par && !ip->i_psr ) {
+		while ( !ip->i_par && !ip->i_psr ) {
 			if ( mode & IPNDLY ) {
 				u.u_error = ENXIO;
 				--ip->i_paw;

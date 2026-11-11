@@ -545,6 +545,8 @@ register INODE *ip;
 	ip->i_size = dip->di_size;
 	cansize(ip->i_size);
 
+	/* A cached slot keeps its previous occupant's block list. */
+	kclear(&ip->i_a, sizeof(ip->i_a));
 	switch (ip->i_mode&IFMT) {
 	case IFBLK:
 	case IFCHR:
@@ -564,9 +566,6 @@ register INODE *ip;
 		ip->i_pwx = dip->di_pwx;
 		canshort(ip->i_pwx);
 		pipecoreinit(ip);	/* the fields with no disk image */
-		break;
-	default:
-		kclear(&ip->i_a, sizeof(ip->i_a));
 		break;
 	}
 
@@ -591,12 +590,15 @@ register INODE *ip;
 	struct dinode dinode;
 	vaddr_t v;
 
+	if (ilocked(ip)==0)
+		panic("icopymd(%p)", ip);
 	if (getment(ip->i_dev, 0) == NULL)
 		return;
 
 	ino = ip->i_ino;
 	if (ip->i_refc==0 && ip->i_nlink==0 && ino!=BADFIN && ino!=ROOTIN) {
 		iclear(ip);
+		kclear(&ip->i_a, sizeof(ip->i_a));
 		ip->i_lrt = 0;
 		ip->i_mode = 0;
 	}
@@ -657,14 +659,18 @@ register INODE *ip;
 }
 
 /*
- * Copy all relevant inodes out on device `dev'.
+ * Copy all relevant inodes out on device `dev'.  Each is locked, since
+ * icopymd() sleeps between copying the inode and writing it out.  An inode
+ * locked elsewhere is waited for if `f' is set, else skipped: ialloc() holds
+ * `m_ilock' and the parent directory, so it must not wait on a gate.
  */
-isync(dev)
+isync(dev, f)
 register dev_t dev;
 {
 	register INODE *ip;
 
 	for (ip=&inodep[NINODE-1]; ip>=inodep; --ip) {
+again:
 		if (ip->i_refc == 0)
 			continue;
 		if (ip->i_dev != dev)
@@ -673,7 +679,17 @@ register dev_t dev;
 			continue;
 		if ((ip->i_flag&(IFACC|IFMOD|IFCRT)) == 0)
 			continue;
+		if (ilocked(ip)) {
+			if (f == 0)
+				continue;
+			/* Wait for the holder, then recheck: it may have gone. */
+			ilock(ip);
+			iunlock(ip);
+			goto again;
+		}
+		ilock(ip);
 		icopymd(ip);
+		iunlock(ip);
 	}
 }
 
@@ -758,6 +774,15 @@ iaccess(ip, mode)
 register INODE *ip;
 register int mode;
 {
+	/* Devices stay writable on a read-only mount. */
+	if ((mode & IPW) != 0) {
+		switch (ip->i_mode&IFMT) {
+		case IFREG:
+		case IFPIPE:
+			if (getment(ip->i_dev, 1) == NULL)
+				return 0;
+		}
+	}
 	if ((imode(ip, u.u_uid, u.u_gid)&mode) != mode) {
 		u.u_error = EACCES;
 		return 0;

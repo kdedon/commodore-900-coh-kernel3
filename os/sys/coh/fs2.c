@@ -256,10 +256,11 @@ register MOUNT *mp;
 
 	if ((mp->m_flag&MFRON) != 0)
 		return;
-	isync(mp->m_dev);
+	isync(mp->m_dev, 1);
 	sbp = &mp->m_super;
 	if (sbp->s_fmod==0)
 		return;
+	bsync();			/* FSCLEAN must not reach disk first */
 	bp = bclaim(mp->m_dev, (daddr_t)SUPERI);
 	sbp->s_time = timer.t_time;
 	sbp->s_fmod = 0;
@@ -338,7 +339,7 @@ haveilock:
 #endif
 
 		if (sbp->s_ninode == 0) {
-			isync(dev);
+			isync(dev, 0);
 			ino = 1;
 			inop = sbp->s_inode;
 			inope = &sbp->s_inode[NICINOD];

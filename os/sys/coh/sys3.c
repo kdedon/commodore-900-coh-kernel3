@@ -154,6 +154,13 @@ char *np;
 		goto done;
 	}
 
+	/* O_TRUNC needs write permission, checked before fdinit() owns ip. */
+	if ((oflag&O_TRUNC) && ((ip->i_mode&IFPIPE)!=IFPIPE) && (0 == cflag)
+	 && (iaccess(ip, IPW) == 0)) {
+		idetach(ip);
+		goto done;
+	}
+
 	if ( ip->i_flag & IFEXCL) {
 		idetach(ip);
 		SET_U_ERROR( EEXIST, "open: file already open O_EXCL" );
@@ -199,14 +206,8 @@ char *np;
 
 	/* If requested, truncate the file.  */
 	if ( (oflag&O_TRUNC) && ((ip->i_mode&IFPIPE)!=IFPIPE) ) {
-		if (0 == cflag) {	/* No need to truncate a new file.  */
-			if (iaccess(ip, IPW) != 0) {
-				iclear(ip);
-			} else {
-				idetach(ip);
-				goto done;
-			}
-		}
+		if (0 == cflag)		/* No need to truncate a new file.  */
+			iclear(ip);
 	}
 
 	iunlock(ip);
@@ -282,7 +283,7 @@ unsigned n;
 	type = ip->i_mode&IFMT;
 	if (type != IFCHR)
 		ilock(ip);
-	if ( fdp->f_flag & IPAPPEND )
+	if (f && (fdp->f_flag & IPAPPEND))
 		fdp->f_seek = ip->i_size;
 	u.u_io.io_seek = fdp->f_seek;
 	u.u_io.io_base = bp;
@@ -293,6 +294,8 @@ unsigned n;
 		iacc(ip);		/* read - atime */
 	} else {
 		iwrite(ip, &u.u_io);
+		if (type != IFCHR && (fdp->f_flag & IPSYNC))
+			icopymd(ip);
 	}
 	n -= u.u_io.io_ioc;
 	fdp->f_seek += n;
@@ -463,6 +466,10 @@ time_t utime[2];
 	if (ftoi(np, 'r') != 0)
 		return;
 	ip = u.u_cdiri;
+	if (getment(ip->i_dev, 1) == NULL) {
+		idetach(ip);
+		return;
+	}
 	if (owner(ip->i_uid)) {
 		iamc(ip);	/* utime - atime/mtime/ctime */
 		if (utime != NULL) {

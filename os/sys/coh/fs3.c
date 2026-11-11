@@ -64,8 +64,10 @@ register INODE *ip;
 		break;
 	case IFDIR:
 		if ((mode&IPW) != 0) {
-			if (super() == 0)
+			if (super() == 0) {
+				u.u_error = EISDIR;
 				return;
+			}
 			if (mode == IPW) {
 				u.u_error = EISDIR;
 				return;

@@ -164,6 +164,10 @@ char *np;
 	if (ftoi(np, 'r') != 0)
 		return;
 	ip = u.u_cdiri;
+	if (getment(ip->i_dev, 1) == NULL) {
+		idetach(ip);
+		return;
+	}
 	if (owner(ip->i_uid)) {
 		if (u.u_uid != 0)
 			mode &= ~ISVTXT;
@@ -186,6 +190,10 @@ char *np;
 	if (ftoi(np, 'r') != 0)
 		return;
 	ip = u.u_cdiri;
+	if (getment(ip->i_dev, 1) == NULL) {
+		idetach(ip);
+		return;
+	}
 	if (super()) {
 		ip->i_mode &= ~(ISUID | ISGID);  /* clear any setuid/setgid */
 		ip->i_uid = uid;
@@ -221,47 +229,9 @@ uclose(fd)
  */
 ucreat(np, mode)
 char *np;
-register int mode;
+int mode;
 {
-	register INODE *ip;
-	register int fd;
-	register int cflag;
-
-	cflag = 0;
-	if (ftoi(np, 'c') != 0)
-		return;
-	if ((ip=u.u_cdiri) == NULL) {
-		if ((ip=imake((mode&~IFMT)|IFREG, 0)) == NULL)
-			return;
-	} else {
-		if (iaccess(ip, IPW)==0) {
-			idetach(ip);
-			return;
-		}
-		switch (ip->i_mode&IFMT) {
-		case IFBLK:
-		case IFCHR:
-			break;
-		case IFDIR:
-			u.u_error = EISDIR;
-			idetach(ip);
-			return;
-		default:
-			if (getment(ip->i_dev, 1) == NULL) {
-				idetach(ip);
-				return;
-			}
-		}
-		cflag = 1;
-	}
-	if ((fd=fdopen(ip, IPW)) < 0) {
-		idetach(ip);
-		return;
-	}
-	if (cflag)
-		iclear(ip);
-	iunlock(ip);
-	return (fd);
+	return (uopen(np, O_WRONLY|O_CREAT|O_TRUNC, mode));
 }
 
 /*
@@ -337,7 +307,7 @@ int fd, cmd, arg;
 			fdp->f_flag |= IPNDLY;
 		if ( arg & O_APPEND )
 			fdp->f_flag |= IPAPPEND;
-		/* no break */
+		return 0;
 
 	case F_GETFL:
 		switch ( fdp->f_flag & (IPR+IPW) ) {
@@ -419,7 +389,8 @@ char *np2;
 	idirent(ip1->i_ino);
 	idetach(u.u_pdiri);
 	ilock(ip1);
-	ip1->i_nlink++;
+	if (u.u_error == 0)
+		ip1->i_nlink++;
 	icrt(ip1);	/* link - ctime */
 	idetach(ip1);
 	return (0);
