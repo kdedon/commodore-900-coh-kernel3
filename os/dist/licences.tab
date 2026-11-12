@@ -1,7 +1,7 @@
 # licences.tab -- WHAT EACH COMPONENT THIS REPOSITORY CUTS IS DISTRIBUTED UNDER.
 #
 # The same register the userland keeps beside its lists (its dist/licences.tab
-# states the format at length); this one covers the three console drivers.
+# states the format at length); this one covers the console drivers.
 # pack-component.sh cuts a package's LICENCES/ directory from it: index.tab is
 # the rows below that govern the component, and each governing text travels
 # verbatim under the regime's id.  Nothing here is legal advice.
@@ -22,5 +22,7 @@ lic mit-oc    n y y LICENSE  MIT.License  this repository's own work, MIT
 
 use console-hr      mwc-bsd3   hrtty/ is the 0.7.3-era hi-res terminal driver
 use console-lr      mwc-bsd3   sys/z8001/rec/ is the 0.7.3-era keyboard and text console driver
+use console-lc      mwc-bsd3   sys/z8001/rec/ is the 0.7.3-era keyboard and text console driver
+use console-lc      mit-oc     sys/z8001/rec/lc.c is this project's 8563 back end
 use console-serial  mwc-bsd3   compiled against the MWC kernel headers, and documented by an MWC article
 use console-serial  mit-oc     sys/z8001/drv/notty.c is this project's redirect to the al line

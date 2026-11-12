@@ -10,7 +10,7 @@
 #	  console-hr-man  the Lexicon articles for it
 #
 # A component is an os/dist/lists/*.list carrying a `package' line -- here the
-# three loadable console drivers, one list each -- and `components' prints them
+# loadable console drivers, one list each -- and `components' prints them
 # with the kinds each publishes.  A bare component name means its `bin' kind.
 # OUTDIR defaults to build/packages.
 #

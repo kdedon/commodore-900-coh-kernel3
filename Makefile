@@ -80,10 +80,10 @@ $(HB)/kobj/kernel.out: $(HB)/link-kernel.sh $(HB)/wdbtab-hd21.h $(KSRC) $(KVFILE
 	sh $(HB)/link-kernel.sh
 
 # --- drivers --------------------------------------------------------------
-DRIVERS = $(HB)/build/drv/notty $(HB)/build/drv/lrtty $(HB)/build/drv/hrtty \
-	  $(HB)/build/drv/hostfs
+DRIVERS = $(HB)/build/drv/notty $(HB)/build/drv/lrtty $(HB)/build/drv/lctty \
+	  $(HB)/build/drv/hrtty $(HB)/build/drv/hostfs
 drivers: $(DRIVERS)
-# One script builds all four; grouped to prevent concurrent invocation.
+# One script builds them all; grouped to prevent concurrent invocation.
 DRVSRC := $(shell find $(OS)/sys/z8001/drv $(OS)/sys/z8001/rec $(OS)/hrtty \
 	     \( -name '*.c' -o -name '*.h' -o -name '*.s' \) 2>/dev/null) \
 	  $(OS)/sys/drv/hostfs.c
@@ -108,7 +108,7 @@ kernel-headers-dist:
 	sh $(HB)/pack-headers.sh $(KVERSION)
 
 # --- component packages -------------------------------------------------------
-# A component is an os/dist/lists/*.list carrying a `package' line -- the three
+# A component is an os/dist/lists/*.list carrying a `package' line -- the
 # loadable console drivers, one each -- and it exports its runtime files, the
 # complete corresponding source for them and the Lexicon articles for them.  They
 # are cut here because the facts they need are here: which drivers were linked,

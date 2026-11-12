@@ -144,7 +144,11 @@ mmload()
 		mmport = 0x3B4;
 #else
 		mmmask = 0xFFF;
+#ifdef LC8563
+		lcinit();
+#else
 		mmbase = pfix(MMSEG, MMADDR); /* fix screen memory base  JFF */
+#endif
 #endif
 		mmncurse = (0xB<<8)|0xC;  /* normal (underline) cursor */
                 mmbcurse = (0x1<<8)|0xC;  /* block cursor */
@@ -177,7 +181,7 @@ mmload()
 	 * 6845 CRT controller.
 	 */
 	mmvonn();			/* Video on, high-res */
-#ifdef STANDALONE
+#if defined(STANDALONE) && !defined(LC8563)
 	for (i=0; i<10; i+=2) {
 		register int mode;
 
@@ -205,9 +209,35 @@ mmstart(tp)
 register TTY *tp;
 {
 	register int c;
+#ifdef LC8563
+	/*
+	 * The chip's register index is shared state, so a call from interrupt
+	 * level while output is running leaves its characters to the drain
+	 * loop already in progress.
+	 */
+	static char busy;
+	register int s;
 
+	s = sphi();
+	if (busy) {
+		spl(s);
+		return;
+	}
+	busy = 1;
+	for (;;) {
+		if ((c = ttout(tp)) < 0)
+			break;
+		spl(s);
+		(*mmfunc)(c);
+		s = sphi();
+	}
+	lcsync();
+	busy = 0;
+	spl(s);
+#else
 	while ((c = ttout(tp)) >= 0)
 		(*mmfunc)(c);
+#endif
 }
 
 /*
@@ -765,6 +795,10 @@ int vec;
 	int count;
 	char *buffer;
 
+#ifdef LC8563
+	u.u_error = EINVAL;
+	return;
+#endif
 	pos = getuwd(vec);
 	count = getuwd(vec += 2);
 	buffer = getupd(vec += 2);

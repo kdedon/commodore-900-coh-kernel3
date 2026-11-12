@@ -95,7 +95,7 @@ map_drv() {	# map_drv <name> <os-relative source path>...
 	echo >> "$MAP"
 }
 
-# notty: serial console (major 8); alternatives are lrtty or hrtty for displays.
+# notty: serial console (major 8); alternatives are lrtty, lctty or hrtty for displays.
 if cc_one "$OS/sys/z8001/drv/notty.c"; then
 	link_drv notty "$OBJ/notty.o"
 	map_drv notty sys/z8001/drv/notty.c
@@ -117,6 +117,22 @@ then
 	map_drv lrtty sys/z8001/rec
 else
 	fail_drv lrtty
+fi
+
+# lctty: lrtty's terminal on the LC card's 8563; lc.c replaces mmas.s.  The
+# font is the kernel's lcfont[].
+if cc_one "$OS/sys/z8001/rec/kv.c" &&
+   cc_one "$OS/sys/z8001/rec/v0.c" &&
+   cc_one "$OS/sys/z8001/rec/mm.c" -DLC8563 &&
+   cc_one "$OS/sys/z8001/rec/kb.c" &&
+   cc_one "$OS/sys/z8001/rec/kbtab.c" &&
+   cc_one "$OS/sys/z8001/rec/lc.c"
+then
+	link_drv lctty "$OBJ/kv.o" "$OBJ/v0.o" "$OBJ/mm.o" "$OBJ/lc.o" \
+		       "$OBJ/kb.o" "$OBJ/kbtab.o"
+	map_drv lctty sys/z8001/rec
+else
+	fail_drv lctty
 fi
 
 # hrtty: keyboard + HI-RES BITMAP console at major 8; sources use os/hrtty/h on include path.

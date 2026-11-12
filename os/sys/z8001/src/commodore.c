@@ -40,6 +40,10 @@
 struct	romconf	romconf;
 char	*_bvirt;
 
+extern	int	lcnvi;
+long	nvipc;			/* where the pending single step starts */
+static	int	nviskip;	/* a no-progress step trap was retried */
+
 /*
  * What the hi-res video board says it is.
  *
@@ -539,6 +543,36 @@ register int (*f)();
 msigsin()
 {
 	regl[OFCW] |= MFNVE;
+}
+
+/*
+ * The LC card's VDC pulls NVI low after each of its accesses until its
+ * status is read, so a step must start with the line released.  Called with
+ * interrupts off on the way back to the user.
+ */
+nviarm()
+{
+	nvipc = *(long *)&regl[OPC];
+	if (lcnvi)
+		lcrel();
+}
+
+/*
+ * A step trap that made no progress came from the VDC: release it and step
+ * again, once, so an instruction that jumps to itself still traps.
+ */
+nvispur()
+{
+	if (!lcnvi)
+		return 0;
+	lcrel();
+	if (nviskip || *(long *)&regl[OPC] != nvipc) {
+		nviskip = 0;
+		return 0;
+	}
+	nviskip = 1;
+	regl[OFCW] |= MFNVE;
+	return 1;
 }
 
 /*

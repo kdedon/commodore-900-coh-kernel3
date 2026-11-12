@@ -366,6 +366,7 @@ start:
 	call	lpclk			/ Initialise clock and LP
 
 	call	hrreport_		/ what vidsel found on the video board
+	call	vcreport_		/ and any ID-byte card it found
 	call	memreport_		/ the memory map commodore_ settled on
 
 / Call main with interrupts on
@@ -648,6 +649,10 @@ vint:
 1:
 	di	VI			/ Keep out vectored interrupts
 	inc	depth_			/ interrupts off from this to iret
+	bit	SS|44(spo), $NVIBIT	/ Single step?
+	JR	eq, 3f
+	call	nviarm_			/ Release the LC chip's hold on NVI
+3:
 
 	popl	rr0, (sp)		/ rr0 = OS+ES
 	ld	r2, $ES			/ Restore OS + ES ...
@@ -1324,7 +1329,8 @@ _idle_:
 / main_ copies the icode into user space.  It overwrites the icode-relative
 / offset in the argv[2] slot of init's argument vector -- default driv_no =
 / /drv/notty -- with the driver matching whichever board answers.  Hi-res is
-/ preferred, then the lo-res text card, else the serial redirect.
+/ preferred, then the lo-res text card, then an ID-byte card (vcprobe), else
+/ the serial redirect.
 / Interrupts are still off at this point.
 /
 / A frame buffer that answers is not yet a console this kernel can draw on.
@@ -1360,9 +1366,15 @@ vidsel:
 	ret
 1:	ld	r0, $0x3700		/ lo-res text framebuffer 0x370000 >> 8
 	call	vprobe
-	ret	eq			/ absent: keep the default /drv/notty
+	jr	eq, 3f			/ absent: try the ID-byte cards
 	ld	r0, $driv_lr-icode
 	ld	icarg2_, r0		/ patch argv[2] offset -> /drv/lrtty
+	ret
+3:	call	vcprobe_
+	test	r1
+	ret	eq			/ none: keep the default /drv/notty
+	ld	r0, $driv_lc-icode
+	ld	icarg2_, r0		/ patch argv[2] offset -> /drv/lctty
 	ret
 
 / vprobe - r0 = MMU base field (physical base >> 8) of a framebuffer.  Map
@@ -1438,7 +1450,7 @@ argv:	.word	USEG, file-icode
 icarg1_: .word	swap-icode	/ bootpatch: -> fl_su for single user
 	.word	USEG
 	.globl	icarg2_
-icarg2_: .word	driv_no-icode	/ vidsel/bootpatch: -> driv_hr, driv_lr, driv_no
+icarg2_: .word	driv_no-icode	/ vidsel/bootpatch: -> driv_hr, driv_lr, driv_lc, driv_no
 	.long	0
 
 file:	.ascii	"/etc/init"
@@ -1452,6 +1464,8 @@ driv_no: .ascii	"/drv/notty"		/ serial console (compiled default)
 driv_hr: .ascii	"/drv/hrtty"		/ hi-res bitmap console (0x3E0000)
 	.byte	0
 driv_lr: .ascii	"/drv/lrtty"		/ lo-res 6845 text console (0x370000)
+	.byte	0
+driv_lc: .ascii	"/drv/lctty"		/ LC 8563 text console (ID 0xC1 at 0x01FF)
 	.byte	0
 	.even
 icend:

@@ -1,0 +1,19 @@
+# console-lc.list -- the LC card's 8563 text console at major 8.
+#
+# /drv/lctty is lrtty's terminal (sys/z8001/rec/{kv,v0,mm,kb,kbtab}.c, mm.c
+# built with LC8563) over lc.c, which draws through the 8563's registers.
+# vidsel selects it when no memory-mapped board answers and the card's ID
+# byte reads 0xC1 at 0x01FF.  The font is the kernel's.
+# PACKAGE.  See console-serial.list: a per-machine variant, not a choice.
+package  console-lc
+role     variant
+# KINDS -- see commodore-900-dist's os/dist/PACKAGE-FORMAT.  `bin' is the
+# list below; `src' is the complete corresponding source for every executable it
+# installs and `man' the pages for those programs.  Both refuse to be cut from a
+# guess.
+kinds    src man
+# A driver is documented under the device it provides, not under its file name:
+# console(1) is the console's escape sequences, kb(1) the keyboard it reads.
+articles lctty console kb
+
+f	/drv/lctty	755 0 1

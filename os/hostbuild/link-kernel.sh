@@ -102,6 +102,7 @@ done
 [ -n "${KDDT:-}" ] && { cc_one "$OS/sys/z8001/src/ddt.c" "$IMD" ||
 	{ echo "ddt compile FAIL" | tee -a "$LOG"; fail=1; }; }
 for f in "$OS"/sys/z8001/src/commodore.c "$OS"/sys/z8001/src/memmap.c \
+	 "$OS"/sys/z8001/src/vcard.c "$OS"/sys/z8001/src/lcfont.c \
 	 "$OS"/sys/z8001/src/console.c \
 	 "$OS"/sys/z8001/src/trap.c \
 	 "$OS"/sys/z8001/src/tab.c \

@@ -87,6 +87,8 @@ unsigned sig, id, fcw;
 		if (sig == SIGSEGV)
 			if (stviol(id, pc, sp))
 				return;
+		if (sig == SIGTRAP && nvispur())
+			return;
 		/*
 		 * A user program's fault is the program's business: send the
 		 * signal.  0.7.3 entered the debugger here too, which stops the
