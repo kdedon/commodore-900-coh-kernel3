@@ -154,6 +154,7 @@ uhalt()
 {
 	if (super() == 0)
 		return;
+	aldrain();
 	halt();
 }
 

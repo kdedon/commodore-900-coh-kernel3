@@ -25,6 +25,8 @@
 #define	TxEMPTY	0x04		/* transmit buffer empty */
 #define	WR0	0x0101		/* command register */
 #define	RR0	0x0101		/* Tx & Rx status */
+#define	RR1	0x0103		/* special receive status, All Sent */
+#define	ALLSENT	0x01		/* RR1: last bit has left */
 #define	WR3	0x0107		/* Rx params & control */
 #define	WR4	0x0109		/* Tx & Rx misc params & modes */
 #define	WR5	0x010b		/* Tx params & control */
@@ -63,6 +65,7 @@ sccinit()
 {
 
 	sccup = 1;
+	alwait(RR1, ALLSENT);		/* the ROM may still be sending */
 	outb(WR4, 0x4c);		/* x16 clock, 1 stop bit, no parity */
 	outb(WR11, 0x56);		/* Rx & Tx clocks from the BRG */
 	outb(WR12, 0x11);		/* time constant 17 -> 9600 baud */

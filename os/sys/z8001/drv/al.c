@@ -47,7 +47,7 @@
 #define	endof(x)	(&x[sizeof(x)/sizeof(x[0])])
 #define	alindex(x)	(((x)-VECTOR)>>3)	/* index in tty struct */
 
-#define	BAUD(x,y) (int)((x)/((y)*32L))-4L  /* calc counter value */
+#define	BAUD(x,y) (int)((x)/((y)*32L))-2L  /* calc counter value */
 
 extern struct romconf romconf;
 
@@ -178,6 +178,8 @@ CON alcon ={
 #define	EXTIE	0x01			/* external interrupt enable */
 #define	RxAVAIL	0x01			/* char available */
 #define	TxEMPTY	0x04			/* transmit buffer empty */
+#define	ALLSENT	0x01			/* RR1: last bit has left */
+#define	SCCWAIT	40000			/* polls before giving up */
 
 
 /*
@@ -295,6 +297,7 @@ alload()
 	al_ercnt = 0;			/* reset count */
 	for (tp = &altty[0], vec = VECTOR; tp < &altty[NMINOR]; tp += 2) {
 		b = albase(tp);
+		alwait(b+RR1, ALLSENT);	/* the console may be sending */
 		outb(b+WR9, RESET|VIS);	/* reset chip */
 		outb(b+WR2, vec);	/* set chip's base vector */
 		setivec(vec+0, alTxintr);	/* channel B interrupt vecs */
@@ -472,6 +475,41 @@ TTY *tp;
 		outb(b+WR8, c);
 }
 
+/*
+ * Poll an SCC status port until a bit sets or the bound runs out.  Buffer
+ * empty comes a character before All Sent, and a channel reset or
+ * reprogrammed while still shifting garbles that character.
+ */
+alwait(port, bit)
+register int port, bit;
+{
+	register unsigned n;
+
+	for (n = SCCWAIT; n != 0 && (inb(port)&bit) == 0; n--)
+		;
+}
+
+/*
+ * Send what the first line still has queued, by polling, and let its last
+ * bit leave: the machine is about to stop with interrupts off.
+ */
+aldrain()
+{
+	register TTY *tp;
+	register int b, c, s;
+	register unsigned n;
+
+	tp = &altty[0];
+	b = albase(tp);
+	s = sphi();
+	for (n = 4096; n != 0 && (c = ttout(tp)) >= 0; n--) {
+		alwait(b+RR0, TxEMPTY);
+		outb(b+WR8, c);
+	}
+	alwait(b+RR1, ALLSENT);
+	spl(s);
+}
+
 alparam(tp)
 TTY *tp;
 {
@@ -490,6 +528,7 @@ TTY *tp;
 		u.u_error = ENODEV;
 		return;
 	}
+	alwait(b+RR1, ALLSENT);
 	outb(b+WR12, (baud&0xff));
 	outb(b+WR13, baud>>8);
 	switch (tp->t_sgttyb.sg_flags & (EVENP|ODDP|RAW)) {
