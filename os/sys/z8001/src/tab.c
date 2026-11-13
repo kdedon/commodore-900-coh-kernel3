@@ -102,6 +102,8 @@ int	upoll();
 int	uuname();
 long	ualarm2();
 long	utick();
+int	ugetrlimit();
+int	usetrlimit();
 
 /*
  * Machine independent system call table.
@@ -164,8 +166,8 @@ struct systab sysitab[NMICALL] ={
 	I,		  INT,	usetgid,	/* 46 = setgid */
 	0,		  INT,	ugetgid,	/* 47 = getgid */
 	I+P,		  PTR,	usignal,	/* 48 = signal */
-	0,		  INT,	unone,		/* 49 = ??? */
-	0,		  INT,	unone,		/* 50 = ??? */
+	I+P,		  INT,	ugetrlimit,	/* 49 = getrlimit */
+	I+P,		  INT,	usetrlimit,	/* 50 = setrlimit */
 	P,		  INT,	uacct,		/* 51 = acct */
 	I+I+I,		  INT,	unull,		/* 52 = ??? (phys) */
 	I,		  INT,	ulock,		/* 53 = lock */

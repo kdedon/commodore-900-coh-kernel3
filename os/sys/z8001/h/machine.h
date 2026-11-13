@@ -33,7 +33,8 @@
 #define	ISTVIRT		ADDR(USTACK+1, 0)
 #define	SOVSIZE		64		/* Only needed for old compatibility */
 #define	UPASIZE		2048		/* Size of user area */
-#define	MADSIZE		32768L		/* Maximum stack seg size */
+#define	MADSIZE		16384L		/* Default RLIMIT_STACK soft limit */
+#define	STKMAX		63488L		/* Largest stack uproto() can map */
 #define	SCHUNK		16384		/* Amount copied in core dump write */
 #define SMICALL		0		/* Start of independent system calls */
 #define NMICALL		66		/* Machine independent system calls */

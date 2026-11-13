@@ -34,6 +34,8 @@
 #include <shlib.h>
 #include <sys/slib.h>
 
+fsize_t	stkallow();
+
 /*
  * Sizes.
  */
@@ -104,7 +106,7 @@ char	*envp[];
 		}
 	} else {
 		hialloc = 0;
-		if ((ssp = exstack(&sp, argp, envp)) == NULL) {
+		if ((ssp = exstack(&sp, argp, envp, stkallow())) == NULL) {
 			idetach(ip);
 			return;
 		}
@@ -346,20 +348,34 @@ fsize_t so;
 }
 
 /*
+ * The stack exec gives a program: the RLIMIT_STACK soft limit, as far as
+ * a segment can go.
+ */
+fsize_t
+stkallow()
+{
+	if (u.u_stkcur < 0 || u.u_stkcur > STKMAX)
+		return (STKMAX);
+	return (u.u_stkcur);
+}
+
+/*
  * Given a pointer to a list of arguments and a pointer to a list of
- * environments, return a stack with the arguments and environments on it.
+ * environments, return a stack of `allow' bytes with the arguments and
+ * environments on it.
  */
 SEG *
-exstack(iusp, argp, envp)
+exstack(iusp, argp, envp, allow)
 char **iusp;		/* Back patch sp value */
 char *argp[];		/* Arguments for new process */
 char *envp[];		/* Environments for new process */
+fsize_t allow;		/* Stack allowance */
 {
 	SEG *sp;		/* Stack segment pointer */
 	struct adata {		/* Storage for arg and env data */
 		char	**up;		/* User vector pointer */
-		int	np;		/* Number of pointers in vector */
-		int	nc;		/* Number of characters in strings */
+		unsigned np;		/* Number of pointers in vector */
+		unsigned nc;		/* Number of characters in strings */
 	} arg, env;
 	struct sdata {		/* To keep segment pointers */
 		vaddr_t	base;		/* Top of segment virtual */
@@ -371,10 +387,10 @@ char *envp[];		/* Environments for new process */
 	register char **usrvp;		/* Vector pointer into user seg */
 	register char *usrcp;		/* Character pointer into user seg */
 	register int c;			/* Character fetched from user */
-	register int chrsz;		/* Size of strings */
+	fsize_t chrsz;			/* Size of strings */
 	register struct adata *adp;	/* Arg and env scanner */
-	register int vecsz;		/* Size of vectors */
-	register int stksz;		/* Size of stack argument region */
+	fsize_t vecsz;			/* Size of vectors */
+	fsize_t stksz;			/* Size of stack argument region */
 
 	/* Validate and evaluate size of args and envs */
 	arg.up = argp;
@@ -386,8 +402,8 @@ char *envp[];		/* Environments for new process */
 		adp->nc = 0;
 		if (excount(adp->up, &adp->np, &adp->nc) == 0)
 			return (NULL);
-		chrsz += adp->nc * sizeof(char);
-		vecsz += adp->np * sizeof(char *);
+		chrsz += adp->nc;
+		vecsz += (fsize_t)adp->np * sizeof(char *);
 		if (adp == &env)
 			break;
 	}
@@ -403,7 +419,7 @@ char *envp[];		/* Environments for new process */
 		+ sizeof(char *)	/* Splimit for z8000 */
 		+ sizeof(int);		/* errno */
 	stksz += ISTSIZE;
-	if (stksz > MADSIZE) {
+	if (stksz > allow) {
 		u.u_error = E2BIG;
 		return (NULL);
 	}
@@ -424,7 +440,7 @@ char *envp[];		/* Environments for new process */
 	 * miss it.  So the allowance is committed while the segment is still
 	 * being built, and stviol() is left holding the ceiling.
 	 */
-	if ((sp=salloc((fsize_t)MADSIZE, SFDOWN)) == NULL)
+	if ((sp=salloc(allow, SFDOWN)) == NULL)
 		return (NULL);
 	stksz -= ISTSIZE;
 
@@ -515,8 +531,8 @@ char *envp[];		/* Environments for new process */
  */
 excount(usrvp, nap, nbp)
 register char **usrvp;
-int *nap;
-int *nbp;
+unsigned *nap;
+unsigned *nbp;
 {
 	register char *usrcp;
 	register int c;
@@ -537,7 +553,11 @@ int *nbp;
 				c = getubd(usrcp++);
 				if (u.u_error)
 					return (0);
-				nb++;
+				/* Past any stack, and before nb wraps. */
+				if (++nb > STKMAX) {
+					u.u_error = E2BIG;
+					return (0);
+				}
 				if (c == '\0')
 					break;
 			}

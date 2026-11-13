@@ -49,10 +49,16 @@ COHFS=$(sh "$UL/mk/deps.sh" tools)/bin/cohfs
 ROOTPART=${ROOTPART:-136}
 
 # The allowance and the sizes.  ALLOW must agree with MADSIZE in
-# include/sys/machz8001.h and with ALLOWANCE in deepstack.c; it is repeated
-# here only to be printed, since the probe is what asserts on it.
-ALLOW=32768
+# include/sys/machz8001.h; it is repeated here only to be printed, since the
+# probe is what asserts on it.  BIG is a raised RLIMIT_STACK, in KB, that the
+# probe sets for itself at BIGSIZES; MAXKB is the largest stack the kernel
+# maps (STKMAX).  argmax checks the argument space at ARGKB limits.
+ALLOW=16384
 SIZES="16 256 512 4096"
+BIG=32
+BIGSIZES="16 4096"
+MAXKB=62
+ARGKB="16 32 $MAXKB"
 
 BAD=0
 fail() { echo "  FAIL $*"; BAD=$((BAD + 1)); }
@@ -73,7 +79,9 @@ stage() {
 	cp -f "$IMG" "$WORK/$tag.bin"
 	put() { "$COHFS" put -p "$ROOTPART" -m 755 "$WORK/$tag.bin" "$1" "$2" \
 		>> "$WORK/put.$tag.log" 2>&1; }
-	put "$WORK/deepstack" /bin/deepstack && put "$kern" /coherent || return 1
+	put "$WORK/deepstack" /bin/deepstack &&
+	put "$WORK/argmax" /bin/argmax &&
+	put "$kern" /coherent || return 1
 	for d in notty lrtty hrtty; do
 		[ -f "$drvd/$d" ] && { put "$drvd/$d" "/drv/$d" || return 1; }
 	done
@@ -103,6 +111,12 @@ else
 	fail "deepstack did not compile: $(tail -1 "$WORK/cc.log")"
 	echo "deepstack: cannot continue"; exit 1
 fi
+if "$CCZ" -s -i -o "$WORK/argmax" "$HERE/argmax.c" >> "$WORK/cc.log" 2>&1; then
+	ok "argmax: $(wc -c < "$WORK/argmax") B"
+else
+	fail "argmax did not compile: $(tail -1 "$WORK/cc.log")"
+	echo "deepstack: cannot continue"; exit 1
+fi
 if ! stage new; then
 	fail "cannot stage the image, see $WORK/put.new.log"
 	echo "deepstack: cannot continue"; exit 1
@@ -125,6 +139,13 @@ run() {
 	for s in $SIZES; do
 		echo "/bin/deepstack $s" >> "$WORK/$tag.cmds"
 	done
+	for s in $BIGSIZES; do
+		echo "/bin/deepstack $s $BIG" >> "$WORK/$tag.cmds"
+	done
+	echo "/bin/deepstack 16 $MAXKB" >> "$WORK/$tag.cmds"
+	for k in $ARGKB; do
+		echo "/bin/argmax $k" >> "$WORK/$tag.cmds"
+	done
 	rwork=$WORK/work.$tag.bin; rout=$WORK/$tag.out; rerr=$WORK/$tag.err
 	rcmds=$WORK/$tag.cmds; rharn=$WORK/$tag.harness
 	WORK=$rwork OUT=$rout ERR=$rerr \
@@ -134,18 +155,19 @@ run() {
 }
 
 # verdicts <tag> -- one line per frame size, in the order they ran.
-verdicts() { grep -a -c 'deepstack: PASS' "$WORK/$1.out"; }
+verdicts() { grep -a -c -E '^(deepstack|argmax): PASS' "$WORK/$1.out"; }
 
 # report <tag> -- the numbers, whatever they were.  A run that fails is only
 # useful if it says how far it got.
 report() {
-	grep -a -E 'recursing in a child|bytes of records|level [0-9]+ at|FAIL|PASS|CAPPED' \
+	grep -a -E 'recursing in a child|bytes of records|level [0-9]+ at|argmax:|FAIL|PASS|CAPPED' \
 		"$WORK/$1.out" | sed 's/^/       | /'
 }
 
 # --------------------------------------------------------------- phase 2
-echo "phase 2: every frame size gets the allowance ($ALLOW bytes)"
-n=$(set -- $SIZES; echo $#)
+echo "phase 2: every frame size gets the allowance ($ALLOW bytes, or $BIG KB when set),"
+echo "         and exec takes arguments up to the limit less 4 KB"
+n=$(set -- $SIZES $BIGSIZES $MAXKB $ARGKB; echo $#)
 if run new; then
 	p=$(verdicts new)
 	if [ "$p" = "$n" ]; then

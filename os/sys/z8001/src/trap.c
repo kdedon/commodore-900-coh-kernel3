@@ -162,9 +162,10 @@ uhalt()
  * stack's and has been dealt with, zero if the caller should turn it into a
  * signal.
  *
- * THE ALLOWANCE IS MADSIZE, and exstack() has already committed all of it to
- * the segment, so on this machine the usual answer here is that there is
- * nothing to do.  The two traps the MMU raises mean different things:
+ * THE ALLOWANCE IS THE RLIMIT_STACK SOFT LIMIT (stkallow()), and exstack() has
+ * already committed all of it to the segment, so on this machine the usual
+ * answer here is that there is nothing to do.  The two traps the MMU raises
+ * mean different things:
  *
  *	Yellow (PWW), a write to the segment's lowest 256-byte page.  The
  *	write has SUCCEEDED; the trap only says the stack is in its last
@@ -185,6 +186,8 @@ uhalt()
  * before it touches a new frame at all: those are idempotent and their length
  * is known, so the saved PC is backed up over the store.
  */
+fsize_t	stkallow();
+
 stviol(id, pc, usp)
 register int id;
 register vaddr_t pc, usp;
@@ -196,7 +199,7 @@ register vaddr_t pc, usp;
 	/* CLICKS on both sides: s_size holds bytes (see uproto() in
 	 * commodore.c and the bruc() in seggrow()). */
 	cur = btocru((long)sp->s_size);
-	max = btocru((long)MADSIZE);
+	max = btocru(stkallow());
 
 	if (id & SLV) {			/* Red stack warning */
 		if (getuwi(pc) != 0xA1FD)		/* ld r13, r15 */
@@ -222,7 +225,7 @@ register vaddr_t pc, usp;
 		 */
 		return (1);
 
-	segsize(sp, (vaddr_t)MADSIZE);
+	segsize(sp, (vaddr_t)stkallow());
 	if (u.u_error != 0) {
 		/*
 		 * No room for the whole allowance.  Take the clicks this

@@ -256,6 +256,8 @@ SEG *sp;
 	 * directories afterwards; sproto() sets u_sproto below.
 	 */
 	kclear((char *)&u, sizeof(UPROC));
+	u.u_stkcur = MADSIZE;
+	u.u_stkmax = STKMAX;
 
 	/* The kernel stack grows down to UPROC. */
 	printf("u-area: %u of %u used, %u left for the kernel stack\n",

@@ -2,15 +2,18 @@
  * deepstack.c -- does a process get the whole stack allowance, whatever size
  * its frames are, and does it fault cleanly when the allowance runs out?
  *
- *	deepstack [frame-bytes]		default 16 (16, 256, 512 or 4096)
+ *	deepstack [frame-bytes [limit-KB]]	default 16, and the current limit
+ *	(frame-bytes 16, 256, 512 or 4096; limit-KB is set as RLIMIT_STACK and
+ *	the probe execs itself, so the stack is the one exec makes for it)
  *
  * WHAT THIS IS FOR.  Not "how deep can a program recurse": that number falls
  * out of the allowance divided by the frame, and no test is needed to find it.
  * What is being decided is that the answer does not depend on the FRAME SIZE,
  * which is where this kernel has twice been wrong.
  *
- *   1. THE ALLOWANCE.  exec commits MADSIZE (32 KB, machz8001.h) to the stack
- *	segment.  A recursion must therefore reach the neighbourhood of 32 KB
+ *   1. THE ALLOWANCE.  exec commits the RLIMIT_STACK soft limit (16 KB unless
+ *	raised) to the stack segment.  A recursion must
+ *	therefore reach the neighbourhood of the allowance
  *	whether its frames are 16 bytes or 4096, and the same at every size in
  *	between.  Two separate defects have made this false, and both showed up
  *	only at some frame sizes: a click/byte confusion in stviol() that stopped
@@ -44,10 +47,10 @@
 #include <stdio.h>
 #include <stdlib.h>		/* long strtol(): K&R would truncate it to int */
 #include <unistd.h>		/* long lseek(): the same */
+#include <sys/resource.h>
 
 #define MAXDEPTH	20000	/* a stop, not a target: see CAPPED below	*/
 #define ISTSIZE		4096	/* the argument headroom exec adds (z8001 conf)	*/
-#define ALLOWANCE	32768L	/* MADSIZE: the whole stack a process may have	*/
 #define CEILING		65536L	/* one segment: the hard architectural limit	*/
 #define OUTFILE		"/deepstack.out"
 #define RECLEN		20	/* one fixed-width record, "%6d %012lx\n"	*/
@@ -56,6 +59,7 @@
 int	depth;			/* global: readable from a core file */
 int	fd;
 int	pad_bytes = 16;
+long	allowance;		/* the whole stack this process may have */
 int	kid;
 int	fails;
 
@@ -174,6 +178,7 @@ int argc;
 char **argv;
 {
 	long size, hi, lo, used;
+	struct rlimit rl;
 	int f, st, sig, dhi, dlo;
 
 	/* The argument selects a frame size; anything else is refused rather
@@ -188,12 +193,39 @@ char **argv;
 			return 2;
 		}
 	}
+	if (getrlimit(RLIMIT_STACK, &rl) < 0) {
+		printf("deepstack: FAIL -- getrlimit\n");
+		return 1;
+	}
+	allowance = rl.rlim_cur;
+	if (argc > 2 && atoi(argv[2]) * 1024L != allowance) {
+		/* exec sizes the stack from the soft limit: set it, go again. */
+		rl.rlim_cur = atoi(argv[2]) * 1024L;
+		if (rl.rlim_max < rl.rlim_cur)
+			rl.rlim_max = rl.rlim_cur;
+		if (setrlimit(RLIMIT_STACK, &rl) < 0) {
+			printf("deepstack: FAIL -- setrlimit %ld\n", rl.rlim_cur);
+			return 1;
+		}
+		execv(argv[0], argv);
+		printf("deepstack: FAIL -- cannot exec %s\n", argv[0]);
+		return 1;
+	}
+	/* A forked child has the same limit. */
+	if ((kid = fork()) == 0) {
+		getrlimit(RLIMIT_STACK, &rl);
+		_exit((int)(rl.rlim_cur / 1024) & 0xFF);
+	}
+	st = 0;
+	wait(&st);
+	ck("a forked child has the limit (KB)", (long)((st >> 8) & 0xFF),
+		(allowance / 1024) & 0xFF);
 	if ((fd = creat(OUTFILE, 0644)) < 0) {
 		printf("deepstack: cannot create %s\n", OUTFILE);
 		return 1;
 	}
-	printf("deepstack: recursing in a child, %d bytes of frame padding\n",
-		pad_bytes);
+	printf("deepstack: recursing in a child, %d bytes of frame padding,"
+		" allowance %ld\n", pad_bytes, allowance);
 	fflush(stdout);
 
 	if ((kid = fork()) < 0) {
@@ -284,13 +316,13 @@ char **argv;
 	 * warning page gets a few kilobytes at some sizes and everything at
 	 * others, and clears the check above either way. */
 	ck("  and reached most of the allowance",
-		used > ALLOWANCE / 2 ? 1L : 0L, 1L);
+		used > allowance / 2 ? 1L : 0L, 1L);
 
 	/* 2 -- THE ALLOWANCE HELD.  More than it means the kernel handed out
 	 * stack it never promised, and more than one segment means memory the
 	 * process cannot reach without wrapping the offset -- silent corruption
 	 * rather than depth. */
-	ck("and stopped within the allowance", used <= ALLOWANCE ? 1L : 0L, 1L);
+	ck("and stopped within the allowance", used <= allowance ? 1L : 0L, 1L);
 	ck("  which is inside one segment", used < CEILING ? 1L : 0L, 1L);
 
 	/* 3 -- and the fault took the child alone.  This parent still running

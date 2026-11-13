@@ -59,7 +59,8 @@
 #undef	UPASIZE
 #define	UPASIZE		2048		/* Size of user area (md.s agrees) */
 #undef	MADSIZE
-#define	MADSIZE		32768L		/* Maximum stack seg size */
+#define	MADSIZE		16384L		/* Default RLIMIT_STACK soft limit */
+#define	STKMAX		63488L		/* Largest stack uproto() can map */
 #undef	NMDCALL
 #define	NMDCALL		3		/* Z8001 MD system calls (sysdtab) */
 #undef	NCPCL

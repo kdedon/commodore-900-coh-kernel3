@@ -9,6 +9,7 @@ COHERENT.1/em87	em87	Perform/emulate hardware floating-point operations
 COHERENT.1/fd	fd	Floppy disk driver
 COHERENT.1/fl	fl	Floppy-disk driver
 COHERENT.1/ft	ft	Archive floppy-tape driver
+COHERENT.1/getrlimit	getrlimit()	Get or set a resource limit
 COHERENT.1/hai	hai	Host adapter-independent SCSI driver
 COHERENT.1/kb	kb	Non-configurable keyboard driver
 COHERENT.1/lp.d	lp	Driver for parallel ports

@@ -1,0 +1,37 @@
+ggeettrrlliimmiitt(())          COHERENT System Call          ggeettrrlliimmiitt(())
+
+Get or set a resource limit
+
+#include <sys/resource.h>
+iinntt ggeettrrlliimmiitt((resource, rlp))
+iinntt sseettrrlliimmiitt((resource, rlp))
+int resource; struct rlimit *rlp;
+
+Each process has a soft and a hard limit, rlim_cur and rlim_max,
+for each resource.  getrlimit copies them to *rlp; setrlimit sets
+them from it.  The soft limit may be anything up to the hard limit.
+Any process may lower its hard limit; only the superuser may raise
+it.  fork and exec keep the limits.  RLIM_INFINITY means as much as
+the system can give.
+
+The C900 kernel keeps only RLIMIT_STACK; the other resources are
+refused with EINVAL.  exec gives a program a stack of the soft
+limit, committed whole, because a Z8001 stack cannot grow on demand.
+A program that goes deeper dies of SIGSEGV.  The soft limit starts
+at 16 KB; the hard limit starts at 62 KB, the largest stack segment
+the MMU maps.  The shell's "ulimit -s" sets them in kilobytes.
+
+The arguments and environment are part of the stack and may fill
+all of it but 4 KB; past that exec fails with E2BIG.  So the
+argument space follows the stack limit: about 12 KB at the default,
+about 28 KB with "ulimit -s 32".
+
+***** See Also *****
+
+COHERENT system calls, exec, sh
+
+***** Diagnostics *****
+
+Both return 0 on success and -1 on error: EINVAL for an unknown
+resource or a soft limit above the hard one, EPERM for a hard limit
+raised by an ordinary user, EFAULT for a bad rlp.
