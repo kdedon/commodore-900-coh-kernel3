@@ -31,6 +31,7 @@ typedef struct buf {
 	vaddr_t  b_resid;		/* Driver returns count here */
 	faddr_t	 b_faddr;		/* Far Virtual address */
 	paddr_t	 b_paddr;		/* Physical address */
+	struct	 buf *b_hnext;		/* Next on the block number chain */
 #else
 	off_t	 b_count;		/* Size of I/O */
 	off_t	 b_resid;		/* Driver returns count here */

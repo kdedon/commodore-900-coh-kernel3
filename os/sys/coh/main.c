@@ -132,6 +132,7 @@ main()
 
 	u.u_error = 0;
 	bufinit();
+	ihinit();
 	_CHIRP('0', 156);
 	cltinit();
 	_CHIRP('1', 156);

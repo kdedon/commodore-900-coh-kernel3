@@ -160,7 +160,7 @@ int (*f)();
 	 */
 	kclear(pp, sizeof(PROC));
 
-	pp->p_flags = PFCORE;
+	pp->p_flags = PFCORE|PFSPROTO;
 	pp->p_state = PSRUN;
 	pp->p_ttdev = NODEV;
 #ifndef _I386

@@ -137,9 +137,9 @@ int n;
 	 * on any given segment.
 	 *
 	 * Other processes mapping a segment this pass moves pick the new
-	 * base up through segload(), which rebuilds the prototype with
-	 * sproto() in the resumed process's own context whenever sexflag is
-	 * set -- the same path a swap-in relies on.
+	 * base up through segload(): vremap() marks them PFSPROTO, and
+	 * segload() rebuilds the prototype in each one's own context -- the
+	 * same path a swap-in relies on.
 	 */
 	if (KRUNCH == 0)
 		return;

@@ -347,6 +347,66 @@ idirent(ino)
 }
 
 /*
+ * In-core inodes are chained by inode number alone, through table indices;
+ * irehash() is the only way an inode in the table changes its number.
+ */
+#define	NIHASH	32
+static int ihead[NIHASH];
+static int *inext;
+#define	ihashp(ino)	(&ihead[(unsigned)(ino) & (NIHASH-1)])
+
+ihinit()
+{
+	register int i;
+
+	if ((inext = kalloc(NINODE * sizeof(int))) == NULL)
+		panic("ihinit");
+	for (i = 0; i < NIHASH; i++)
+		ihead[i] = -1;
+	for (i = 0; i < NINODE; i++) {
+		inodep[i].i_ino = 0;
+		inext[i] = ihead[0];
+		ihead[0] = i;
+	}
+}
+
+irehash(ip, ino)
+INODE *ip;
+ino_t ino;
+{
+	register int *p;
+	register int i;
+
+	i = ip - inodep;
+	for (p = ihashp(ip->i_ino); *p != i; p = &inext[*p])
+		;
+	*p = inext[i];
+	ip->i_ino = ino;
+	p = ihashp(ino);
+	inext[i] = *p;
+	*p = i;
+}
+
+/*
+ * The in-core inode for `ino' on `dev', or NULL.
+ */
+static INODE *
+ifind(dev, ino)
+register dev_t dev;
+register ino_t ino;
+{
+	register INODE *ip;
+	register int i;
+
+	for (i = *ihashp(ino); i >= 0; i = inext[i]) {
+		ip = &inodep[i];
+		if (ip->i_ino==ino && ip->i_dev==dev)
+			return (ip);
+	}
+	return (NULL);
+}
+
+/*
  * Return a pointer to a locked inode in core containing the given
  * inode number and device.
  */
@@ -359,18 +419,16 @@ iattach(dev, ino)
 	register MOUNT *mp;
 
 	for (;;) {
-		fip = NULL;
-		for (ip=&inodep[NINODE-1]; ip>=inodep; --ip) {
-			if (ip->i_ino==ino && ip->i_dev==dev)
-				break;
-			if (ip->i_refc == 0) {
-				if (fip==NULL || ip->i_lrt<lrt) {
-					fip = ip;
-					lrt = ip->i_lrt;
+		if ((ip = ifind(dev, ino)) == NULL) {
+			fip = NULL;
+			for (ip=&inodep[NINODE-1]; ip>=inodep; --ip) {
+				if (ip->i_refc == 0) {
+					if (fip==NULL || ip->i_lrt<lrt) {
+						fip = ip;
+						lrt = ip->i_lrt;
+					}
 				}
 			}
-		}
-		if (ip < inodep) {
 			if ((ip=fip) == NULL) {
 				devmsg(dev, "Inode table overflow");
 /*DEBUG*/
@@ -388,12 +446,17 @@ printf("cmd=%s time=%lu\n",cmd, u.u_btime);
 				iunlock(ip);
 				continue;
 			}
+			/* Another process may have read it in while we slept. */
+			if (ifind(dev, ino) != NULL) {
+				iunlock(ip);
+				continue;
+			}
 			ip->i_dev = dev;
-			ip->i_ino = ino;
+			irehash(ip, ino);
 			ip->i_refc = 1;
 			ip->i_lrt = timer.t_time;
 			if (icopydm(ip) == 0) {
-				ip->i_ino = 0;
+				irehash(ip, 0);
 				ip->i_refc = 0;
 				iunlock(ip);
 				return (NULL);
@@ -472,11 +535,7 @@ register ino_t ino;
 	register INODE *ip;
 	INODE inode;
 
-	for (ip=&inodep[NINODE-1]; ip>=inodep; --ip) {
-		if (ip->i_ino==ino && ip->i_dev==dev)
-			break;
-	}
-	if (ip < inodep) {
+	if ((ip = ifind(dev, ino)) == NULL) {
 		ip = &inode;
 		ip->i_dev = dev;
 		ip->i_ino = ino;

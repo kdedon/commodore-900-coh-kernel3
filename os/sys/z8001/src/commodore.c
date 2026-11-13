@@ -269,15 +269,6 @@ mproto()
 		}
 		return (1);
 	}
-	/*
-	 * The map is sparse, so inhibit every descriptor first; a stale one
-	 * could expose physical 0 or the previous image.
-	 */
-	for (i=0; i<NHUSEG; i++) {
-		u.u_sproto.mp_hsegs[i].mp_base = 0;
-		u.u_sproto.mp_hsegs[i].mp_len = 0;
-		u.u_sproto.mp_hsegs[i].mp_attr = HA_CPUI;
-	}
 	sn = USTACK;
 	for (i=SISTACK; i<=SIPDATA; i++) {
 		if ((sn = uproto(pp->p_segp[i], sn, i)) < 0)
@@ -336,31 +327,17 @@ slceil0()
  */
 segload()
 {
-	/* Kernel processes have no user segment map to load.  User
-	 * processes load their prototype, which the MI (seg.c/exec) rebuilds
-	 * with sproto() whenever the segment set changes -- so segload just
-	 * installs the current u.u_sproto.  (0.7.3 gated a lazy in-segload
-	 * rebuild on PFSPROTO; the 3.2 process model dropped that flag.) */
+	/* Kernel processes have no user segment map to load. */
 	if ((SELF->p_flags & PFKERN) != 0)
 		return;
 	/*
-	 * With a swapper running, the segment set can stay the same while the
-	 * memory under it moves: a segment goes to disk and comes back at
-	 * whatever click base was free.  mp_hsegs holds raw click bases --
-	 * this machine has too few Z8010 descriptors to give every segment a
-	 * persistent one, the way the i286 selector in s_faddr let it -- so a
-	 * prototype built before the move names where the memory used to be,
-	 * and the process resumes mapped onto whatever now lives there.
-	 *
-	 * Rebuild it here.  This is the one place that runs in the resumed
-	 * process's own context with its own `u' mapped (dispatch() calls it
-	 * after conrest, and swap-in happens in the swapper's context, where
-	 * `u' is the swapper's).  Compaction moves memory under a stable
-	 * segment set in the same way, so this rebuild serves both it and the
-	 * swapper.  A kernel with no swap extent leaves sexflag clear and
-	 * pays nothing.
+	 * The prototype holds raw click bases, so it goes stale when a
+	 * segment of this process is moved, resized, swapped or replaced.
+	 * Whatever does that sets PFSPROTO (vremap() for every user of a
+	 * moved segment); rebuild only then, since this runs with interrupts
+	 * masked on every switch.
 	 */
-	if (sexflag != 0)
+	if ((SELF->p_flags & PFSPROTO) != 0)
 		sproto();
 	loadmmu(u.u_sproto.mp_nseg, &u.u_sproto.mp_hsegs[0]);
 }
@@ -390,7 +367,6 @@ int si;
 	 */
 	if (sp == NULL)
 		return (sn);
-	hp = &u.u_sproto.mp_hsegs[sn];
 	f = sp->s_flags&SFSHRX ? 0x01 : 0;	/* read only? */
 	base = 0;
 	b = btocrd(sp->s_paddr);	/* 3.2: SEG carries a BYTE paddr (0.7.3
@@ -412,6 +388,14 @@ int si;
 	if (sn + (l+MSSIZE-1)/MSSIZE > hl)
 		return (-1);
 	u.u_segl[si].sr_base = ADDR(sn, base);
+	/* Inhibit any hole between the last descriptor written and this one. */
+	while (u.u_sproto.mp_nseg < sn) {
+		hp = &u.u_sproto.mp_hsegs[u.u_sproto.mp_nseg++];
+		hp->mp_base = 0;
+		hp->mp_len = 0;
+		hp->mp_attr = HA_CPUI;
+	}
+	hp = &u.u_sproto.mp_hsegs[sn];
 	while (l > 0) {
 		if (l >= MSSIZE) {
 /*			printf("Large sproto, size=%u, sn=%d\n", l, sn); */

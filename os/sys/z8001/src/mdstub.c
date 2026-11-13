@@ -134,7 +134,34 @@ read_cmos(reg)
  */
 void
 vremap(sp)
-SEG *sp;
+register SEG *sp;
+{
+	register PROC *pp;
+	register SEG **spp;
+	register int s;
+
+	FP_SEL(sp->s_faddr) = btocrd(sp->s_paddr);
+	FP_OFFW(sp->s_faddr) = 0;
+	/* Every placement change ends here: mark each process that maps
+	 * the segment so its next segload() rebuilds the prototype. */
+	if ((pp = procq.p_nforw) == NULL)
+		return;
+	for (; pp != &procq; pp = pp->p_nforw)
+		for (spp = pp->p_segp; spp < &pp->p_segp[NUSEG]; spp++)
+			if (*spp == sp) {
+				s = sphi();
+				pp->p_flags |= PFSPROTO;
+				spl(s);
+				break;
+			}
+}
+
+/*
+ * vremap() for a segment that no process maps yet.
+ */
+void
+vmapnew(sp)
+register SEG *sp;
 {
 	FP_SEL(sp->s_faddr) = btocrd(sp->s_paddr);
 	FP_OFFW(sp->s_faddr) = 0;

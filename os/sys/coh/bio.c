@@ -59,6 +59,14 @@
 #include <sys/stat.h>
 
 /*
+ * Cache buffers are chained by block number alone, so invalidating one
+ * (b_dev = NODEV) leaves it where it is; only bclaim() moves a buffer.
+ */
+#define	NBHASH	32
+static BUF *bhash[NBHASH];
+#define	bhashp(bno)	(&bhash[(unsigned)(bno) & (NBHASH-1)])
+
+/*
  * Initialise buffer headers.
  */
 bufinit()
@@ -86,6 +94,9 @@ bufinit()
 
 	for (bp=&bufl[NBUF-1]; bp >= bufl; --bp) {
 		bp->b_dev = NODEV;
+		bp->b_bno = 0;
+		bp->b_hnext = bhash[0];
+		bhash[0] = bp;
 		bp->b_faddr = f;
 		bp->b_paddr = p;
 #ifdef	Z8001
@@ -234,11 +245,10 @@ daddr_t bno;
 	register BUF *bp1;
 	register unsigned seqn;
 	register int s;
+	register BUF **bpp;
 
 again:
-	bp1 = NULL;
-	seqn = 0;
-	for (bp=&bufl[NBUF-1]; bp >= bufl; --bp) {
+	for (bp = *bhashp(bno); bp != NULL; bp = bp->b_hnext) {
 		if (bp->b_bno == bno  &&  bp->b_dev == dev) {
 			lock(bp->b_gate);
 			if (bp->b_bno != bno  ||  bp->b_dev != dev) {
@@ -250,6 +260,10 @@ again:
 			bsmap(bp);
 			return (bp);
 		}
+	}
+	bp1 = NULL;
+	seqn = 0;
+	for (bp=&bufl[NBUF-1]; bp >= bufl; --bp) {
 		if (locked(bp->b_gate) == 0) {
 			if (bufseqn-bp->b_seqn >= seqn) {
 				bp1 = bp;
@@ -281,9 +295,22 @@ again:
 		bwrite(bp, 0);
 		goto again;
 	}
+	/* Another process may have read the block in while we slept. */
+	for (bp1 = *bhashp(bno); bp1 != NULL; bp1 = bp1->b_hnext) {
+		if (bp1->b_bno == bno  &&  bp1->b_dev == dev) {
+			unlock(bp->b_gate);
+			goto again;
+		}
+	}
+	for (bpp = bhashp(bp->b_bno); *bpp != bp; bpp = &(*bpp)->b_hnext)
+		;
+	*bpp = bp->b_hnext;
 	bp->b_flag = BFNTP;
 	bp->b_dev = dev;
 	bp->b_bno = bno;
+	bpp = bhashp(bno);
+	bp->b_hnext = *bpp;
+	*bpp = bp;
 	bsmap(bp);
 	return (bp);
 }

@@ -71,34 +71,38 @@ unsigned l;
 	register ALL *ap;
 	register ALL *ap1;
 	register ALL *ap2;
-	register unsigned i;
 	register unsigned n;
 	register unsigned s;
 
+	/* An exact fit anywhere, else the first block big enough. */
 	n = 1 + (l + sizeof(ALL) - 1) / sizeof(ALL);
-	for (i=0; i<2; i++) {
-		for (ap1=apq; link(ap1)!=apq; ap1=link(ap1)) {
-			if (ap1 == NULL)
-				panic("Corrupt arena");
-			if (tstfree(ap1)) {
-			       for (ap2=link(ap1); tstfree(ap2); ap2=link(ap2))
-					if (ap2 == apq)
-						break;
-				ap1->a_link = (char *)ap2;
-				if ((s=ap2-ap1) >= n) {
-					if (s > n) {
-						if (i == 0)
-							continue;
-						ap = &ap1[n];
-						ap->a_link = (char *)ap2;
-						ap1->a_link = (char *)ap;
-					}
-					setused(ap1);
-					kclear((char *)ap1->a_data, l);
-					return (ap1->a_data);
-				}
+	ap = NULL;
+	for (ap1=apq; link(ap1)!=apq; ap1=link(ap1)) {
+		if (ap1 == NULL)
+			panic("Corrupt arena");
+		if (tstfree(ap1)) {
+		       for (ap2=link(ap1); tstfree(ap2); ap2=link(ap2))
+				if (ap2 == apq)
+					break;
+			ap1->a_link = (char *)ap2;
+			if ((s=ap2-ap1) == n) {
+				ap = ap1;
+				break;
 			}
+			if (s > n && ap == NULL)
+				ap = ap1;
 		}
+	}
+	if ((ap1 = ap) != NULL) {
+		ap2 = link(ap1);
+		if (ap2-ap1 > n) {
+			ap = &ap1[n];
+			ap->a_link = (char *)ap2;
+			ap1->a_link = (char *)ap;
+		}
+		setused(ap1);
+		kclear((char *)ap1->a_data, l);
+		return (ap1->a_data);
 	}
 	/*
 	 * Say so.  There is exactly one arena (allkp, sized by ALLSIZE), and

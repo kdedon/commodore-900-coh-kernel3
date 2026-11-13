@@ -80,6 +80,7 @@ char	*envp[];
 	SEG		*lseg[NSLIBSEG];	/* Library segments, pre-commit */
 	SLIB		*libl[NSLIB];		/* and the libraries they are */
 	int		nlib;			/* How many libraries */
+	int		s;			/* Saved interrupt state */
 	char		cmd[sizeof(u.u_comm)];	/* The name, before any lookup */
 
 	pp = SELF;
@@ -144,6 +145,9 @@ char	*envp[];
 		pp->p_segp[SISLIB+2*i+1] = lseg[2*i+1];
 	}
 	u.u_sproto.mp_hceil = slceil(libl, nlib);
+	s = sphi();
+	pp->p_flags |= PFSPROTO;
+	spl(s);
 	/*
 	 * Read in load module.
 	 */

@@ -395,7 +395,7 @@ char *sp;
 	}
 	for (ip=&inodep[NINODE-1]; ip>=inodep; --ip) {
 		if (ip->i_dev == rdev)
-			ip->i_ino = 0;
+			irehash(ip, 0);
 	}
 	bflush(rdev);
 	dclose(rdev);

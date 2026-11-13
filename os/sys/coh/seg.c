@@ -290,10 +290,8 @@ fsize_t n;
 	}
 #endif
 
-	if (sp != NULL) {
+	if (sp != NULL)
 		sp->s_flags = r;
-		vremap( sp );
-	}
 	else {
 		if ((f&SFNSWP) != 0)
 			return (NULL);
@@ -649,7 +647,7 @@ register SEG *sp1;
 	sp1->s_lrefc--;
 	sp2->s_flags = sp1->s_flags & ~SFCORE;
 	sp2->s_size  = sp1->s_size;
-	vremap( sp2 );
+	vmapnew( sp2 );
 	return (sp2);
 }
 
@@ -685,7 +683,7 @@ fsize_t  n;
 	sp->s_flags = SFCORE;
 	sp->s_paddr = p;
 	sp->s_size  = n;
-	vremap( sp );
+	vmapnew( sp );
 	bp->b_faddr = sp->s_faddr;
 
 	while (n != 0) {
@@ -726,7 +724,7 @@ fsize_t  n;
 		n -= nb;
 	}
 	sp->s_flags = 0;
-	vremap( sp );
+	vmapnew( sp );
 	unlock(bp->b_gate);
 	SELF->p_flags &= ~PFSWIO;
 }
@@ -832,7 +830,7 @@ fsize_t s;
 			sp2->s_paddr = p1;
 			/*   s_faddr = 0; */
 			/*   s_flags = 0; */
-			vremap( sp2 );
+			vmapnew( sp2 );
 			return (sp2);
 		}
 		p1 = sp1->s_paddr + sp1->s_size;
@@ -874,7 +872,7 @@ fsize_t s;
 			sp2->s_paddr = p2-s;
 			/*   s_faddr = 0; */
 			/*   s_flags = 0; */
-			vremap( sp2 );
+			vmapnew( sp2 );
 			return (sp2);
 		}
 		p2 = sp1->s_paddr;
@@ -890,22 +888,30 @@ sproto()
 {
 	register int n;
 	register SEG *sp;
+	register SR *srp;
+	register SEG **spp;
+	register int s;
 
+	s = sphi();
+	SELF->p_flags &= ~PFSPROTO;
+	spl(s);
 	kclear(u.u_segl, sizeof(u.u_segl));
-	for (n=0; n<NUSEG; n++) {
-		if ((sp=SELF->p_segp[n]) == NULL)
+	srp = u.u_segl;
+	spp = SELF->p_segp;
+	for (n=0; n<NUSEG; n++, srp++, spp++) {
+		if ((sp = *spp) == NULL)
 			continue;
 		if (n == SIUSERP)
-			u.u_segl[n].sr_base = &u;
+			srp->sr_base = &u;
 		else
-			u.u_segl[n].sr_flag |= SRFPMAP;
+			srp->sr_flag |= SRFPMAP;
 		/* db(1) expects only text and data in a core dump. */
 		if (n!=SISTEXT && n!=SISDATA
 #ifdef SISLIB
 		 && n<SISLIB
 #endif
 		 )
-			u.u_segl[n].sr_flag |= SRFDUMP;
+			srp->sr_flag |= SRFDUMP;
 		/* SRFDATA is what iomapvp() accepts as a raw-I/O destination
 		 * (bio.c), so it must name only segments the process may be
 		 * written into.  The shared part of a shared library is read-
@@ -920,9 +926,9 @@ sproto()
 		 * the SFSHRX segments read-only. */
 		if (n!=SIUSERP && n!=SISTEXT && n!=SIPTEXT
 		 && (sp->s_flags&SFSHRX) == 0)
-			u.u_segl[n].sr_flag |= SRFDATA;
-		u.u_segl[n].sr_size = sp->s_size;
-		u.u_segl[n].sr_segp = sp;
+			srp->sr_flag |= SRFDATA;
+		srp->sr_size = sp->s_size;
+		srp->sr_segp = sp;
 	}
 	return (mproto());
 }
