@@ -20,6 +20,7 @@
  * Uses on-board RS-232 port B (SCC channel B) for all I/O.
  */
 #include <coherent.h>
+#include <romconf.h>
 
 #define	RxAVAIL	0x01		/* character available */
 #define	TxEMPTY	0x04		/* transmit buffer empty */
@@ -86,35 +87,51 @@ sccinit()
  * card, or the serial line -- so it draws on whichever screen is fitted, in
  * the font and at the cursor the BIOS diagnostics and kboot left behind.
  *
- * ROMPUTC is that routine, called as a far function pointer.  The ROM is MWC C
+ * ROMPUTC is that routine in V1.0, called as a far function pointer.  A later
+ * ROM has a service table at ROMJT whose first slot jumps to it, and whose
+ * header points at the addresses of the ROM's variables.  The ROM is MWC C
  * with our argument convention and, like this kernel, addresses frames and
  * locals through SS, so the argument it reads at SS:10 is the word pushed
  * here.  It expands '\n' to CR+LF itself, which means the CR putchar() sends
  * ahead of a newline arrives as a second column reset rather than a blank
  * line.
  *
- * ROMHRF and ROMLRF are the two bytes the ROM's dispatcher tests, the two past
- * the end of romconf: non-zero at ROMHRF selects the bitmap renderer, at ROMLRF
- * the text one, neither the serial port.  Reading them is what keeps a serial
- * console from being written twice -- there the ROM would drive the same SCC
- * that putchar() drives four lines further down, so romcput() stands aside and
- * the machine's output is byte-for-byte what it always was.
+ * The ROM's dispatcher tests two bytes: rom_hires, the last of romconf, and
+ * the lo-res flag, ROMLRF in V1.0.  Non-zero rom_hires selects the bitmap
+ * renderer, the lo-res flag the text one, neither the serial port.  Reading
+ * them is what keeps a serial console from being written twice -- there the
+ * ROM would drive the same SCC that putchar() drives four lines further down,
+ * so romcput() stands aside and the machine's output is byte-for-byte what it
+ * always was.
  *
  * Both renderers reach the screen through virtual segments BMS and BMS+1, and
  * commodore() has since pointed those at bmphys, so their bases are put back
  * across the call and restored after it.  Only the base moves: the attributes
  * and limits md.s left on those two segments are the ROM's own values.
  *
+ * The ROM does not wrap: a line longer than the screen (64 columns on the
+ * bitmap, 80 on the text card) piles up in its last column, so romcput()
+ * breaks it with a newline.  The ROM's renderer is not reentrant and the two
+ * segments are moved under it, so interrupts are held off across each call.
+ * The lo-res cursor the ROM leaves is kept in romlrpos for the text console
+ * driver, which carries on below it instead of clearing the screen.
+ *
  * batflag bounds the whole thing.  The ROM keeps its console state -- the two
- * selection bytes and the cursor -- in the top 7KB of memory, which is where
- * the u-area allocator starts handing out pages as soon as main() creates its
- * first process; batflag is set immediately before that happens and never
- * cleared.  While it is clear the state is intact and the clock interrupt is
+ * selection bytes and the cursor -- at the top of memory (7KB, 12KB on newer
+ * ROMs), where the u-area allocator starts handing out pages as soon as main()
+ * creates its first process; batflag is set immediately before that happens
+ * and never cleared.  While it is clear the state is intact and the clock interrupt is
  * still a no-op, so the ROM cannot be re-entered from a handler either.
  */
 #define	ROMPUTC	0x00000FC2L	/* ROM putchar, segment 0 offset 0x0FC2 */
-#define	ROMHRF	0x010017FFL	/* Hi-res screen is the ROM's console */
 #define	ROMLRF	0x01001800L	/* Lo-res screen is the ROM's console */
+#define	ROMJT	0x0000029EL	/* ROM service table */
+#define	JTMAGIC	0x43394A54L	/* "C9JT" */
+#define	JTVARS	8		/* Offset of its variable list pointer */
+#define	JTSVC	16		/* Offset of its first service slot */
+#define	JTCONLR	9		/* Lo-res flag in the variable list */
+#define	JTCURS	8		/* Video cursor in the variable list */
+#define	ROMLRC	0x01000614L	/* V1.0's lo-res cursor: row, then column */
 #define	HRFB	0x003E0000L	/* Hi-res bitmap, 100KB from here */
 #define	LRFB	0x00370000L	/* Lo-res character/attribute RAM */
 
@@ -125,7 +142,32 @@ sccinit()
 static	int	(*romputc)() = (int (*)())ROMPUTC;
 static	int	romcsel;	/* Which console the ROM selected */
 static	paddr_t	romcfb;		/* Physical base of that screen */
+static	int	romcw;		/* Its width in columns */
+static	int	romccol;	/* Characters on the current line */
+static	char	*romlrc;	/* The ROM's lo-res cursor, if that is the screen */
+int	romlrpos = -1;		/* Lo-res cursor the ROM left, row*80+column */
 extern	paddr_t	bmphys;		/* Where BMS points between calls */
+extern	struct romconf romconf;
+
+/*
+ * Call the ROM's character routine with its screen mapped.
+ */
+static
+romcall(c)
+int c;
+{
+	register int s;
+
+	s = sphi();
+	pfix(BMS, romcfb);
+	pfix(BMS+1, romcfb+0x00010000L);
+	(*romputc)(c);
+	pfix(BMS, bmphys);
+	pfix(BMS+1, bmphys+0x00010000L);
+	if (romlrc != NULL)
+		romlrpos = pgetw(romlrc)*80 + pgetw(romlrc+2);
+	spl(s);
+}
 
 /*
  * Print a character on the screen the ROM selected, if it selected one.
@@ -134,13 +176,25 @@ static
 romcput(c)
 register int c;
 {
+	register char *lrf, *lrc;
 
 	if (romcsel == CSNEW) {
-		if (pgetb((char *)ROMHRF) != 0)
+		lrf = (char *)ROMLRF;
+		lrc = (char *)ROMLRC;
+		if ((long)pgetp((char *)ROMJT) == JTMAGIC) {
+			romputc = (int (*)())(ROMJT+JTSVC);
+			lrf = pgetp((char *)ROMJT+JTVARS);
+			lrc = pgetp(lrf + JTCURS*sizeof(char *));
+			lrf = pgetp(lrf + JTCONLR*sizeof(char *));
+		}
+		if (romconf.rom_hires != 0) {
 			romcfb = HRFB;
-		else if (pgetb((char *)ROMLRF) != 0)
+			romcw = 64;
+		} else if (pgetb(lrf) != 0) {
 			romcfb = LRFB;
-		else {
+			romcw = 80;
+			romlrc = lrc;
+		} else {
 			romcsel = CSNONE;
 			return;
 		}
@@ -148,11 +202,13 @@ register int c;
 	}
 	if (romcsel != CSFB)
 		return;
-	pfix(BMS, romcfb);
-	pfix(BMS+1, romcfb+0x00010000L);
-	(*romputc)(c);
-	pfix(BMS, bmphys);
-	pfix(BMS+1, bmphys+0x00010000L);
+	if (c == '\n')
+		romccol = 0;
+	else if (c >= ' ' && c < 0177 && romccol++ == romcw) {
+		romcall('\n');
+		romccol = 1;
+	}
+	romcall(c);
 }
 
 /*

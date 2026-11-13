@@ -208,9 +208,40 @@ mmload()
 	mmattr = ATT;
 	setctype(mmncurse);	/* set normal cursor */
 	setpage();
+#ifdef LC8563
 	mmclear();
+#else
+	mmkeep();
+#endif
 	setcurse();
 }
+
+#ifndef LC8563
+/*
+ * Carry on below what the boot ROM left on the screen, if the kernel saw
+ * where its cursor was, else clear it.  The ROM uses all 25 rows; from the
+ * last one, scroll it into the normal 24.
+ */
+mmkeep()
+{
+	extern int romlrpos;
+	register int r;
+
+	if (romlrpos < 0 || romlrpos >= (NROW+1)*NCOL) {
+		mmclear();
+		return;
+	}
+	r = romlrpos / NCOL;
+	mmcol = romlrpos % NCOL;
+	if (r >= NROW) {
+		mmcopy(position(1, 0), position(0, 0), NROW*NCOL, 0, mmbase);
+		mmstuff(position(NROW, 0), ' '|ATT, NCOL, mmbase);
+		r = NROW-1;
+	}
+	mmrow = r;
+	reposition();
+}
+#endif
 
 /*
  * Start the output stream.
