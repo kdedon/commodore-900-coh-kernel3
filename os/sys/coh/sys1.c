@@ -648,7 +648,7 @@ int *stp;
 				pp->p_flags |= PFSTOP;
 				unlock(pnxgate);
 				if (stp != NULL)
-					putuwd(stp, 0177);
+					putuwd(stp, pp->p_exit);
 				return (pp->p_pid);
 			}
 			if (pp->p_state == PSDEAD) {

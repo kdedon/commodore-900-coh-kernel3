@@ -134,6 +134,7 @@ actvsig()
 	}
 	msysgen(&u.u_sysgen);
 	if ((pp->p_flags&PFTRAC) != 0) {
+		pp->p_exit = (n<<8)|0177;
 		pp->p_flags |= PFWAIT;
 		n = ptret();
 		pp->p_flags &= ~(PFWAIT|PFSTOP);
@@ -317,6 +318,8 @@ next:
 				u.u_error = EINVAL;
 			break;
 		case 7:
+			/* A step armed before this stop would still fire. */
+			msigsoff();
 			goto sig;
 		case 8:
 			sign = SIGKILL;

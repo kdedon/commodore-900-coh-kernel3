@@ -357,7 +357,13 @@ pfork()
 	cpp->p_ppid  = pp->p_pid;
 	cpp->p_ttdev = pp->p_ttdev;
 	cpp->p_group = pp->p_group;
-	cpp->p_ssig  = pp->p_ssig;
+	/*
+	 * Signals pending on the parent are its own.  One posted while
+	 * segadup() slept would otherwise run the parent's handler in the
+	 * child as well -- an alarm handler that re-arms then leaves the
+	 * child an alarm that outlives its exec.
+	 */
+	cpp->p_ssig  = 0;
 #ifdef _I386
 	cpp->p_dfsig  = pp->p_dfsig;
 	cpp->p_dsig  = pp->p_dsig;
@@ -477,6 +483,9 @@ pexit(s)
 	 * Write out accounting directory and close all files associated with
 	 * this process.
 	 */
+	/* A signal during a sleep below would envrest() out of exit. */
+	pp->p_isig = ~(sig_t)0;
+	pp->p_ssig = 0;
 	setacct();
 	if (u.u_rdir)
 		ldetach(u.u_rdir);

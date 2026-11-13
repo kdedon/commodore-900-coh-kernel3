@@ -558,6 +558,14 @@ msigsin()
 }
 
 /*
+ * Cancel a pending single step.
+ */
+msigsoff()
+{
+	regl[OFCW] &= ~MFNVE;
+}
+
+/*
  * Idle process.
  */
 idle()

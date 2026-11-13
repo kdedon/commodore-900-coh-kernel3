@@ -68,6 +68,7 @@ char	*envp[];
 	register INODE	*ip;			/* Load file INODE */
 	register PROC	*pp;			/* A cheap copy of SELF */
 	register SEG	*ssp;			/* New stack segment */
+	SEG		*osp;			/* Old segment being freed */
 	register fsize_t	ss;			/* Segment size temp. */
 	register int	hialloc = 1;		/* Set if kernel process */
 	register int	i;			/* For looping over segments */
@@ -130,9 +131,9 @@ char	*envp[];
 	 * gets an I/O error is doomed.
 	 */
 	for (i=1; i<NUSEG; ++i) {
-		if (pp->p_segp[i] != NULL) {
-			sfree(pp->p_segp[i]);
+		if ((osp = pp->p_segp[i]) != NULL) {
 			pp->p_segp[i] = NULL;
+			sfree(osp);
 		}
 	}
 	u.u_sproto.mp_hceil = 0;
@@ -207,8 +208,11 @@ char	*envp[];
 	 */
 	u.u_flag &= ~AFORK;
 	kkcopy(cmd, u.u_comm, sizeof(u.u_comm));
+	/* A tracer must not read an unreadable image or patch a set-id one. */
 	if (iaccess(ip, IPR) == 0)
-		pp->p_flags |= PFNDMP;
+		pp->p_flags = (pp->p_flags|PFNDMP) & ~PFTRAC;
+	if ((ip->i_mode&(ISUID|ISGID)) != 0)
+		pp->p_flags &= ~PFTRAC;
 	if ((ip->i_mode&ISUID) != 0)
 		pp->p_uid = u.u_uid = ip->i_uid;
 	if ((ip->i_mode&ISGID) != 0)
@@ -430,8 +434,11 @@ char *envp[];		/* Environments for new process */
 	aux.vp = aux.ap + sizeof(int) + 2*sizeof(char **);
 	aux.cp = aux.vp + vecsz;
 
+	/* Counting down from the next segment's base borrows 0xFF into the
+	 * segment word's low byte.  The MMU ignores it but 32-bit pointer
+	 * compares do not, so clear it. */
 	stk.base = ISTVIRT;
-	stk.ap = stk.base - stksz;
+	stk.ap = (vaddr_t)(((long)stk.base - stksz) & ~0x00FF0000L);
 	stk.vp = stk.ap + sizeof(int) + 2*sizeof(char **);
 	stk.cp = stk.vp + vecsz;
 
@@ -481,7 +488,8 @@ char *envp[];		/* Environments for new process */
 	aux.base -= sizeof(int);
 	aputi((int *) aux.base, 0);		/* errno */
 	aux.base -= sizeof(char *);
-	aputp((char **) aux.base, (char *)stk.base-sp->s_size+SOVSIZE);
+	aputp((char **) aux.base,
+	    (char *)(((long)stk.base-sp->s_size+SOVSIZE) & ~0x00FF0000L));
 	aux.base -= sizeof(int);
 	aputi((int *) aux.base, 0);		/* mystery word */
 
