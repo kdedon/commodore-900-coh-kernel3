@@ -486,8 +486,9 @@ register IO *iop;
 int (*func1)(), (*func2)();
 char *arg1, *arg2;
 {
-	register int c;
-	int o;
+	register int c, i, k;
+	int n, o;
+	char b[32];
 
 	/*
 	 * Non-blocking writes which can fit.
@@ -504,38 +505,53 @@ char *arg1, *arg2;
 		}
 	}
 
-	while ((c = iogetc(iop)) >= 0) {
+	/*
+	 * The data comes over a chunk at a time.  Characters taken from the
+	 * caller but not queued are given back to the count.
+	 */
+	while (iop->io_ioc != 0) {
 		if ((tp->t_flags & T_CARR) == 0) {
 			u.u_error = EIO;  /* error since no carrier */
 			return;
 		}
-		o = sphi();
-		while (tp->t_oq.cq_cc >= OHILIM) {
-			ttstart(tp);
-			if (tp->t_oq.cq_cc < OHILIM)
-				break;
-			tp->t_flags |= T_HILIM;
-			if (func1)
-				(*func1)(arg1);
-			if (func2)
-				(*func2)(arg2);
-			v_sleep((char *)&tp->t_oq, CVTTOUT, IVTTOUT, SVTTOUT,
-				"ttyoq");
-			/*
-			 * The line discipline is waiting for an output
-			 * queue to drain.
-			 */
-			if (SELF->p_ssig && nondsig()) {
-				u.u_error = EINTR;
-				spl(o);
-				return;
+		n = iop->io_ioc < sizeof(b) ? iop->io_ioc : sizeof(b);
+		ioread(iop, b, n);
+		if (u.u_error)
+			return;
+		for (i = 0; i < n; i += k) {
+			o = sphi();
+			while (tp->t_oq.cq_cc >= OHILIM) {
+				ttstart(tp);
+				if (tp->t_oq.cq_cc < OHILIM)
+					break;
+				tp->t_flags |= T_HILIM;
+				if (func1)
+					(*func1)(arg1);
+				if (func2)
+					(*func2)(arg2);
+				v_sleep((char *)&tp->t_oq, CVTTOUT, IVTTOUT,
+					SVTTOUT, "ttyoq");
+				/*
+				 * The line discipline is waiting for an output
+				 * queue to drain.
+				 */
+				if (SELF->p_ssig && nondsig()) {
+					u.u_error = EINTR;
+					iop->io_ioc += n - i;
+					spl(o);
+					return;
+				}
 			}
+			k = OHILIM - tp->t_oq.cq_cc;
+			if (k > n - i)
+				k = n - i;
+			while ((c = putqn(&tp->t_oq, b + i, k)) == 0) {
+				ttstart(tp);
+				waitq();
+			}
+			k = c;
+			spl(o);
 		}
-		while (cltputq(&tp->t_oq, c) < 0) {
-			ttstart(tp);
-			waitq();
-		}
-		spl(o);
 	}
 	o = sphi();
 	ttstart(tp);
@@ -939,6 +955,34 @@ register TTY *tp;
 			++tp->t_hpos;
 	}
 	return c;
+}
+
+/*
+ * Up to n characters of output into b, as that many calls of ttout() would
+ * give them.  Returns the count.  Called at high priority.
+ */
+int ttoutn(tp, b, n)
+register TTY *tp;
+register char *b;
+int n;
+{
+	register int c, k, m;
+
+	for (k = 0; k < n; ) {
+		if (tp->t_nfill || (tp->t_flags & T_INL)
+		    || (m = getqn(&tp->t_oq, b, n - k)) == 0) {
+			if ((c = ttout(tp)) < 0)
+				break;
+			*b++ = c;
+			k++;
+			continue;
+		}
+		k += m;
+		b += m;
+		if (!ISROUT)
+			tp->t_hpos += m;
+	}
+	return k;
 }
 
 /*

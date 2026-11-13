@@ -120,16 +120,18 @@ else
 fi
 
 # lctty: lrtty's terminal on the LC card's 8563; lc.c replaces mmas.s.  The
-# font is the kernel's lcfont[].
+# font is the kernel's lcfont[].  lcgfx.c is minor 1, /dev/lcvdc.
 if cc_one "$OS/sys/z8001/rec/kv.c" &&
-   cc_one "$OS/sys/z8001/rec/v0.c" &&
+   cc_one "$OS/sys/z8001/rec/v0.c" -DLC8563 &&
    cc_one "$OS/sys/z8001/rec/mm.c" -DLC8563 &&
    cc_one "$OS/sys/z8001/rec/kb.c" &&
    cc_one "$OS/sys/z8001/rec/kbtab.c" &&
-   cc_one "$OS/sys/z8001/rec/lc.c"
+   cc_one "$OS/sys/z8001/rec/lc.c" &&
+   cc_one "$OS/sys/z8001/rec/lcgfx.c" &&
+   as_one "$OS/sys/z8001/rec/lcgfxas.s"
 then
 	link_drv lctty "$OBJ/kv.o" "$OBJ/v0.o" "$OBJ/mm.o" "$OBJ/lc.o" \
-		       "$OBJ/kb.o" "$OBJ/kbtab.o"
+		       "$OBJ/lcgfx.o" "$OBJ/lcgfxas.o" "$OBJ/kb.o" "$OBJ/kbtab.o"
 	map_drv lctty sys/z8001/rec
 else
 	fail_drv lctty

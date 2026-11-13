@@ -344,6 +344,33 @@ register TTY *tp;
 }
 
 /*
+ * Up to n characters of output into b, as that many calls of ttout() would
+ * give them.  Returns the count.  Called at high priority.
+ */
+ttoutn(tp, b, n)
+register TTY *tp;
+register char *b;
+{
+	register int c, k, m;
+
+	for (k = 0; k < n; ) {
+		if (tp->t_nfill || (tp->t_flags & T_INL)
+		    || (m = getqn(&tp->t_oq, b, n - k)) == 0) {
+			if ((c = ttout(tp)) < 0)
+				break;
+			*b++ = c;
+			k++;
+			continue;
+		}
+		k += m;
+		b += m;
+		if (!ISROUT)
+			tp->t_hpos += m;
+	}
+	return (k);
+}
+
+/*
  * Pass a character to the
  * device independent typewriter
  * routines. Handle erase and

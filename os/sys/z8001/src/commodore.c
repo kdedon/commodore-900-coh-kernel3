@@ -299,6 +299,36 @@ gdsinit()
 	pclear(p, (fsize_t)GDSSIZE);
 	pfix(GDS, p);
 	gdsram = 1;
+	if (m == 1)
+		gdrgbi();
+}
+
+/*
+ * The colour board has no console driver, so its descriptor is written here.
+ * Four bits a pixel, 320 bytes a raster: the first 64 KB ends 256 bytes into
+ * raster 204.
+ */
+gdrgbi()
+{
+	register struct gdisp *gp;
+
+	gp = (struct gdisp *)ADDR(GDS, GD_OFF);
+	gp->gd_version = GD_VERSION;
+	gp->gd_width = 640;
+	gp->gd_height = 400;
+	gp->gd_depth = 4;
+	gp->gd_stride = 320;
+	gp->gd_flags = GDF_MAPPED;
+	gp->gd_card = GDC_HR | (hrconf & 0xFF) << 8;
+	gp->gd_seg = BMS;
+	gp->gd_nseg = 2;
+	gp->gd_split = 204;
+	gp->gd_splitx = 256;
+	gp->gd_xasp = 1;
+	gp->gd_yasp = 1;
+	gp->gd_vram = 128;
+	gp->gd_gdsram = 1;
+	gp->gd_magic = GD_MAGIC;
 }
 
 /*

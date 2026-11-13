@@ -12,17 +12,30 @@ extern unsigned char lcfont[128][8];
 
 #define	NCOL	80
 #define	NROWS	25
+#define	NRING	(LCRING / NCOL)	/* rows each plane holds */
 
 static unsigned char lcr24;	/* R24 as last written */
 static unsigned char lcsel;	/* register index as last written */
 static unsigned lcupd;		/* update address as the chip holds it */
-static unsigned lccur;		/* cursor address wanted */
-static unsigned lccurw;		/* and as last written */
+static unsigned lcorg;		/* the screen's first cell in each plane */
+static unsigned lcorgw;		/* and as the display registers hold it */
+static unsigned lccur;		/* cursor cell wanted */
+static unsigned lccurw;		/* cursor address as last written */
 static unsigned lcraw = 0xFFFF;	/* last attribute mapped */
 static unsigned char lcmapped;	/* and what it maps to */
+static char lcaway;		/* the chip shows another picture */
+static unsigned char lcr10;	/* cursor mode and start line wanted */
+static char lcshape;		/* and not yet written */
 
 /* Each row's attribute when the whole row has it, else 0. */
 static unsigned char lcrowa[NROWS];
+
+/* The text address ending a row known to have attribute lcokraw, or 0. */
+static unsigned lcokend;
+static unsigned lcokraw;
+
+/* Row 24 holds only spaces. */
+static char lcblank;
 
 /*
  * Timing for 80x25 text, written whole on every init.  R16/R17 are read
@@ -31,7 +44,7 @@ static unsigned char lcrowa[NROWS];
 static unsigned char lcregs[LCR_NREG] = {
 	0x7E, 0x50, 0x66, 0x49, 0x20, 0x00, 0x19, 0x1D,	/* R0-R7 */
 	0x00, 0x07, 0x20, 0x07, 0x00, 0x00, 0x00, 0x00,	/* R8-R15 */
-	0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x78, 0x08,	/* R16-R23 */
+	0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x78, 0x08,	/* R16-R23 */
 	0x20, 0x47, 0xF0, 0x00, 0x30, 0x07, 0x00, 0x00,	/* R24-R31 */
 	0x00, 0x00, 0x7D, 0x64, 0x05			/* R32-R36 */
 };
@@ -236,6 +249,106 @@ unsigned n;
 			lcrowa[to + i] = lcrowa[from + i];
 }
 
+/* Give the row at cell d the attributes v, or when mixed those of cell s. */
+static
+lcarow(d, s, v)
+unsigned d, s;
+{
+	if (v != 0)
+		lcfill(LCATTR + d, v, NCOL);
+	else
+		lcmove(LCATTR + d, LCATTR + s, NCOL);
+}
+
+/* Bring the screen back to the start of the planes. */
+static
+lchome()
+{
+	register int v;
+
+	lcblk(LCTEXT, LCTEXT + lcorg, NROWS*NCOL);
+	v = lcrowa[0];
+	if (v != 0 && lcsame(0, NROWS-1, v))
+		lcfill(LCATTR, v, NROWS*NCOL);
+	else
+		lcblk(LCATTR, LCATTR + lcorg, NROWS*NCOL);
+	lcorg = 0;
+}
+
+/*
+ * Rows 1 to k move up one and the rest keep their place, as the copy would
+ * leave them.  The screen's start moves down a row instead, so only rows k
+ * to the last are copied, each a row further on.
+ */
+static
+lcrollup(k)
+register unsigned k;
+{
+	register unsigned r, a;
+
+	if (lcorg + (NROWS+1)*NCOL > NRING*NCOL)
+		lchome();
+	a = lcorg + k*NCOL;
+	lcup(LCTEXT + a + NCOL, LCTEXT + a, (NROWS - k)*NCOL);
+	for (r = NROWS; r-- > k; )
+		if (r == NROWS-1 || lcrowa[r] == 0 || lcrowa[r+1] != lcrowa[r])
+			lcarow(lcorg + (r+1)*NCOL, lcorg + r*NCOL, lcrowa[r]);
+	for (r = 0; r < k; r++)
+		lcrowa[r] = lcrowa[r+1];
+	lcorg += NCOL;
+}
+
+/*
+ * Rows 1 to 23 move up one, and row 23 is left blank with the 6845-style
+ * attribute raw, when row 24 already is: the terminal's scroll, which keeps
+ * row 24.  The screen's start moves down a row and only the row after it,
+ * the new row 24, is written.  Returns 0, and does nothing, when row 24 is
+ * not blank in that attribute.
+ */
+lcscroll(raw)
+{
+	register unsigned r, v;
+
+	v = lcmap(raw);
+	if (!lcblank || lcrowa[NROWS-1] != v)
+		return 0;
+	if (lcorg + (NROWS+1)*NCOL > NRING*NCOL)
+		lchome();
+	lcorg += NCOL;
+	lcokend = 0;
+	lcfill(LCTEXT + lcorg + (NROWS-1)*NCOL, ' ', NCOL);
+	lcfill(LCATTR + lcorg + (NROWS-1)*NCOL, v, NCOL);
+	for (r = 0; r < NROWS-2; r++)
+		lcrowa[r] = lcrowa[r+1];
+	lcrowa[NROWS-2] = v;
+	return 1;
+}
+
+/*
+ * Rows 0 to k-1 move down one and the rest keep their place: the screen's
+ * start moves up a row, and row 0 and the rows below k are copied back.
+ */
+static
+lcrolldown(k)
+register unsigned k;
+{
+	register unsigned r;
+
+	lcorg -= NCOL;
+	lcblk(LCTEXT + lcorg, LCTEXT + lcorg + NCOL, NCOL);
+	lcarow(lcorg, lcorg + NCOL, lcrowa[0]);
+	if (k < NROWS-1) {
+		lcblk(LCTEXT + lcorg + (k+1)*NCOL, LCTEXT + lcorg + (k+2)*NCOL,
+		    (NROWS-1-k)*NCOL);
+		for (r = k+1; r < NROWS; r++)
+			if (lcrowa[r] == 0 || lcrowa[r-1] != lcrowa[r])
+				lcarow(lcorg + r*NCOL, lcorg + (r+1)*NCOL,
+				    lcrowa[r]);
+	}
+	for (r = k; r > 0; r--)
+		lcrowa[r] = lcrowa[r-1];
+}
+
 /*
  * Program the chip for 80x25 text and load the font.  R28 goes first so
  * every later address is a 64 KB one.
@@ -251,6 +364,8 @@ lcinit()
 			lcwr(i, lcregs[i]);
 	lcr24 = lcregs[LCR_VSCROLL];
 	lccur = lccurw = lcregs[LCR_CURH] << 8 | lcregs[LCR_CURH + 1];
+	lcorg = lcorgw = 0;
+	lcokend = 0;
 	lcupd = ~LCFONT;
 	lcseek(LCFONT);
 	for (i = 0; i < 128; i++) {
@@ -264,6 +379,7 @@ lcinit()
 	lcfill(LCATTR, lcmap(0x07), NCOL*NROWS);
 	for (i = 0; i < NROWS; i++)
 		lcrowa[i] = lcmap(0x07);
+	lcblank = 1;
 }
 
 /*
@@ -280,20 +396,97 @@ char *base;
 	if (n == 0)
 		return;
 	off >>= 1;
-	lcfill(LCTEXT + off, val & 0xFF, n);
+	lcfill(LCTEXT + lcorg + off, val & 0xFF, n);
+	if (off + n > (NROWS-1)*NCOL)
+		lcblank = (val & 0xFF) == ' ' && (lcblank
+		    || off <= (NROWS-1)*NCOL && off + n >= NROWS*NCOL);
 	if ((val >> 8) != lcraw)
 		lcmapped = lcmap(lcraw = val >> 8);
 	v = lcmapped;
 	r = off / NCOL;
 	e = n == 1 ? r : (off + n - 1) / NCOL;
-	if (lcsame(r, e, v))
+	if (lcsame(r, e, v)) {
+		if (r == e) {
+			lcokend = LCTEXT + lcorg + (r + 1)*NCOL;
+			lcokraw = lcraw;
+			if (r == NROWS-1)
+				lcblank = 0;
+		}
 		return;
-	lcfill(LCATTR + off, v, n);
+	}
+	lcokend = 0;
+	lcfill(LCATTR + lcorg + off, v, n);
 	for (; r <= e; r++)
 		if (r*NCOL >= off && (r + 1)*NCOL <= off + n)
 			lcrowa[r] = v;
 		else if (lcrowa[r] != v)
 			lcrowa[r] = 0;
+}
+
+/*
+ * One cell.  Where it follows the last one written, in a row already all of
+ * its attribute, only the character goes out.
+ */
+lcchar(off, val)
+register unsigned off, val;
+{
+	register unsigned a;
+
+	a = LCTEXT + lcorg + (off >> 1);
+	if (a != lcupd || lcokend - a - 1 >= NCOL || (val >> 8) != lcokraw
+	    || (lcr24 & LCCOPY))
+		mmstuff(off, val, 1, (char *)0);
+	else {
+		if (lcsel != LCR_DATA)
+			outb(LCADDR, lcsel = LCR_DATA);
+		if ((inb(LCADDR) & LCREADY) == 0)
+			lcrdy();
+		outb(LCDATA, val & 0xFF);
+		lcupd++;
+	}
+}
+
+/*
+ * The n characters at s, from cell off on, all in one row and with the
+ * attribute byte raw: what n calls of lcchar() would write.  Where the cells
+ * follow the last one written, in a row already all of that attribute, they
+ * go out in one stream.
+ */
+lcstr(off, s, n, raw)
+unsigned off;
+register char *s;
+register unsigned n;
+unsigned raw;
+{
+	register unsigned a, k;
+
+	a = LCTEXT + lcorg + (off >> 1);
+	while (n != 0) {
+		if (a != lcupd || lcokend - a - 1 >= NCOL || raw != lcokraw
+		    || (lcr24 & LCCOPY)) {
+			mmstuff(off, raw << 8 | *s++ & 0xFF, 1, (char *)0);
+			off += 2;
+			a++;
+			n--;
+			continue;
+		}
+		k = lcokend - a;
+		if (k > n)
+			k = n;
+		if (lcsel != LCR_DATA)
+			outb(LCADDR, lcsel = LCR_DATA);
+		lcupd += k;
+		a += k;
+		off += 2*k;
+		n -= k;
+		while (k != 0) {
+			register unsigned w;
+
+			w = lcwlit(s, k);
+			s += w;
+			k -= w;
+		}
+	}
 }
 
 /*
@@ -308,25 +501,39 @@ char *base;
 
 	if (n == 0)
 		return;
+	lcokend = 0;
 	from >>= 1;
 	to >>= 1;
 	if (down) {
 		from -= n - 1;
 		to -= n - 1;
 	}
-	lcmove(LCTEXT + to, LCTEXT + from, n);
+	if (to + n > (NROWS-1)*NCOL)
+		lcblank = 0;
+	if (n % NCOL == 0 && n >= (NROWS/2)*NCOL) {
+		if (to == 0 && from == NCOL) {
+			lcrollup(n / NCOL);
+			return;
+		}
+		if (from == 0 && to == NCOL && lcorg >= NCOL) {
+			lcrolldown(n / NCOL);
+			return;
+		}
+	}
+	lcmove(LCTEXT + lcorg + to, LCTEXT + lcorg + from, n);
 	v = lcrowa[to / NCOL];
 	if (v != 0 && lcsame(from / NCOL, (from + n - 1) / NCOL, v)
 	    && lcsame(to / NCOL, (to + n - 1) / NCOL, v))
 		return;
-	lcmove(LCATTR + to, LCATTR + from, n);
+	lcmove(LCATTR + lcorg + to, LCATTR + lcorg + from, n);
 	lcmvrows(from, to, n);
 }
 
 /*
  * The 6845 register pairs the terminal code sets: cursor shape, display
  * start and cursor address.  The cursor shape is given in 14-line cells.
- * The cursor address waits for lcsync().
+ * The cursor shape, the display start, only ever page 0, and the cursor
+ * wait for lcsync().
  */
 mmcrt(reg, val)
 unsigned reg, val;
@@ -337,25 +544,72 @@ unsigned reg, val;
 	case 10:
 		s = (val >> 8) & 0x1F;
 		e = val & 0x1F;
-		lcwr(LCR_CURST, ((val >> 8) & 0x60) | (2*s > e ? 7 : 0));
-		lcwr(LCR_CUREND, 8);
+		lcr10 = ((val >> 8) & 0x60) | (2*s > e ? 7 : 0);
+		lcshape = 1;
 		break;
 	case 12:
-		lcaddr(LCR_DISPH, LCTEXT + val);
+		lcorgw = ~lcorg;
 		break;
 	case 14:
-		lccur = LCTEXT + val;
+		lccur = val;
 		break;
 	}
 }
 
-/* Write out the cursor address mmcrt() was last given. */
+/* Write out where the screen starts and the cursor mmcrt() was last given. */
 lcsync()
 {
-	if (lccur != lccurw) {
-		lcaddr(LCR_CURH, lccur);
-		lccurw = lccur;
+	register unsigned a;
+
+	if (lcaway)
+		return;
+	if (lcshape) {
+		lcwr(LCR_CURST, lcr10);
+		lcwr(LCR_CUREND, 8);
+		lcshape = 0;
 	}
+	if (lcorg != lcorgw) {
+		lcaddr(LCR_DISPH, LCTEXT + lcorg);
+		lcaddr(LCR_ATTRH, LCATTR + lcorg);
+		lcorgw = lcorg;
+	}
+	a = LCTEXT + lcorg + lccur;
+	if (a != lccurw) {
+		lcaddr(LCR_CURH, a);
+		lccurw = a;
+	}
+}
+
+/*
+ * Another user of the chip has had it.  The register index, the update
+ * address, the display start, the cursor and the attribute planes, and
+ * whether row 24 is blank, are no longer what was last written; R24 it
+ * has put back.  No console address is 0xFFFF.
+ */
+lcforget()
+{
+	register int i;
+
+	lcsel = 0xFF;
+	lcupd = 0xFFFF;
+	lcorgw = ~lcorg;
+	lccurw = 0xFFFF;
+	lcokend = 0;
+	lcblank = 0;
+	for (i = 0; i < NROWS; i++)
+		lcrowa[i] = 0;
+}
+
+/*
+ * The chip shows a picture of its own, or with away clear the console's again,
+ * and R24 is r24.  Output still goes to the text planes, which no picture
+ * covers, but the display and cursor registers wait.
+ */
+lcbg(away, r24)
+{
+	lcaway = away;
+	lcr24 = r24;
+	lcforget();
 }
 
 mmvoff()

@@ -213,23 +213,28 @@ register TTY *tp;
 	/*
 	 * The chip's register index is shared state, so a call from interrupt
 	 * level while output is running leaves its characters to the drain
-	 * loop already in progress.
+	 * loop already in progress.  While the graphics minor holds the chip
+	 * the output waits in the queue.  The characters are drawn with
+	 * interrupts on, even when the caller had them off: a queue's worth
+	 * takes longer than a clock tick.
 	 */
 	static char busy;
-	register int s;
+	extern char lchold;
+	register int s, n;
+	char b[32];
 
 	s = sphi();
-	if (busy) {
+	if (busy || lchold) {
 		spl(s);
 		return;
 	}
 	busy = 1;
 	for (;;) {
-		if ((c = ttout(tp)) < 0)
+		if ((n = ttoutn(tp, b, sizeof(b))) == 0)
 			break;
-		spl(s);
-		(*mmfunc)(c);
-		s = sphi();
+		splo();
+		mmputs(b, n);
+		sphi();
 	}
 	lcsync();
 	busy = 0;
@@ -322,7 +327,11 @@ int c;
 		   mmcopy(off-2, off, n, 1, mmbase);		/* JFF */
 		}
 								/* JFF */
+#ifdef LC8563
+		lcchar(mmoffset, c|mmattr);
+#else
 		mmstuff(mmoffset, c|mmattr, 1, mmbase);  /* up goes the char */
+#endif
 		if (mmcol == NCOL-1)  /* at end of line? */
 		{  if (mmwrap)      /* wrap mode? */
 		   {  mmoffset -= 2*mmcol;  /* carriage return */
@@ -340,8 +349,48 @@ int c;
 	setcurse();
 }
 
+#ifdef LC8563
 /*
- * Handle special escape sequences for H-19/Z-19 
+ * Put n characters.  A run of printing characters that ends short of the
+ * last column goes out in one piece, with the cursor set once at its end.
+ * The offset can disagree with the row after line 25 is turned off, and
+ * then each character goes alone.
+ */
+mmputs(s, n)
+register char *s;
+register int n;
+{
+	register char *p;
+	register int m;
+	int k;
+
+	while (n > 0) {
+		k = 0;
+		if (mmfunc == mmput && !mminsmode && (m = NCOL-1 - mmcol) > 0
+		    && mmoffset == position(mmrow, mmcol)) {
+			if (m > n)
+				m = n;
+			for (p = s; m != 0 && (*p & 0377) >= ' ' && *p != DEL; m--)
+				p++;
+			k = p - s;
+		}
+		if (k == 0) {
+			(*mmfunc)(*s++ & 0377);
+			n--;
+			continue;
+		}
+		lcstr(mmoffset, s, k, mmattr >> 8);
+		mmcol += k;
+		reposition();
+		setcurse();
+		s += k;
+		n -= k;
+	}
+}
+#endif
+
+/*
+ * Handle special escape sequences for H-19/Z-19
  */
 mmescape(c)
 register int c;
@@ -744,6 +793,13 @@ register int down;
 {
 	register int off;
 
+#ifdef LC8563
+	if (!down && lcscroll(ATT >> 8)) {
+		mmrow = NROW-1;
+		reposition();
+		return;
+	}
+#endif
 	if (mmblank) mmvoff();		/* REC */
 	if (down) {
 		off = position(0, 0);

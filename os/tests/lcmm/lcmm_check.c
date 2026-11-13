@@ -20,7 +20,11 @@
 #define	pos(r, c)	(2*((r)*NCOL+(c)))
 #define	ATT	0x0700
 
-extern int lcinit(), lcsync(), mmstuff(), mmcopy(), mmcrt();
+/* Cell i of the screen the chip shows, and its attribute. */
+#define	TXT(i)	vdc.ram[(vdc.reg[12] << 8 | vdc.reg[13]) + (i)]
+#define	ATR(i)	vdc.ram[(vdc.reg[20] << 8 | vdc.reg[21]) + (i)]
+
+extern int lcinit(), lcsync(), mmstuff(), mmcopy(), mmcrt(), lcchar(), lcstr(), lcscroll();
 extern unsigned char lcfont[128][8];
 
 static unsigned short ref[NCELL];	/* the lo-res card's screen */
@@ -30,6 +34,25 @@ static int bad;
 
 unsigned inb(unsigned port) { return vdc_in(port); }
 void outb(unsigned port, unsigned v) { vdc_out(port, v); }
+
+/* What the driver's assembler lcwlit() does. */
+unsigned
+lcwlit(unsigned char *p, unsigned n)
+{
+	unsigned w = 0, same = 0;
+	int prev = -1;
+
+	while (w < n) {
+		while (!(vdc_in(VDC_ADDR) & 0x80))
+			;
+		vdc_out(VDC_DATA, *p);
+		same = *p == prev ? same + 1 : 1;
+		prev = *p++;
+		if (++w < n && same >= 8)
+			break;
+	}
+	return w;
+}
 
 static unsigned
 attrmap(unsigned a)
@@ -55,6 +78,14 @@ stuff(unsigned off, unsigned val, unsigned n)
 	for (i = 0; i < n; i++)
 		ref[off/2 + i] = val;
 	mmstuff(off, val, n, (char *)0);
+}
+
+/* A printed character, as the terminal code puts one. */
+static void
+putch(unsigned off, unsigned val)
+{
+	ref[off/2] = val;
+	lcchar(off, val);
 }
 
 static void
@@ -89,10 +120,10 @@ dump(FILE *f)
 
 	for (r = 0; r < 25; r++) {
 		for (c = 0; c < NCOL; c++)
-			putc(vdc.ram[0x0000 + r*NCOL + c], f);
+			putc(TXT(r*NCOL + c), f);
 		putc(' ', f);
 		for (c = 0; c < NCOL; c++)
-			fprintf(f, "%02x", vdc.ram[0x0800 + r*NCOL + c]);
+			fprintf(f, "%02x", ATR(r*NCOL + c));
 		putc('\n', f);
 	}
 }
@@ -105,13 +136,13 @@ check(const char *name)
 	FILE *f;
 	int i, err = 0;
 
+	lcsync();
 	for (i = 0; i < NCELL; i++)
-		if (vdc.ram[i] != (ref[i] & 0xFF)
-		 || vdc.ram[0x0800 + i] != attrmap(ref[i] >> 8)) {
+		if (TXT(i) != (ref[i] & 0xFF) || ATR(i) != attrmap(ref[i] >> 8)) {
 			if (!err)
 				printf("  FAIL %s: cell %d row %d col %d: chip %02x/%02x,"
 				    " want %02x/%02x\n", name, i, i / NCOL, i % NCOL,
-				    vdc.ram[i], vdc.ram[0x0800 + i],
+				    TXT(i), ATR(i),
 				    ref[i] & 0xFF, attrmap(ref[i] >> 8));
 			err++;
 		}
@@ -244,7 +275,7 @@ setup(void)
 				err++;
 			}
 	for (i = 0; i < NCELL; i++)
-		if (vdc.ram[i] != ' ' || vdc.ram[0x0800 + i] != 0x0E) {
+		if (TXT(i) != ' ' || ATR(i) != 0x0E) {
 			printf("  FAIL setup: screen not clear at %d\n", i);
 			err++;
 			break;
@@ -301,7 +332,7 @@ cost(void)
 	mark(&c);
 	for (r = 0; r < 10; r++) {
 		for (i = 0; i < 70; i++) {
-			stuff(pos(r, i), 'a' + i % 26 | ATT, 1);
+			putch(pos(r, i), 'a' + i % 26 | ATT);
 			mmcrt(14, r*NCOL + i + 1);
 		}
 		mmcrt(14, (r + 1)*NCOL);
@@ -314,8 +345,73 @@ cost(void)
 		mmcrt(14, (NROW-1)*NCOL);
 	}
 	lcsync();
-	since(&c, "scroll", 10, 10, 17, 270);
+	since(&c, "scroll", 10, 22, 22, 80);
 	check("cost");
+}
+
+/*
+ * Runs of characters as the terminal hands them over: the same cells as one
+ * at a time, at the same cost, and a run of equal ones split as the
+ * streaming helper splits it.
+ */
+static void
+strings(void)
+{
+	struct cost c;
+	int r, i;
+
+	stuff(0, ' '|ATT, NCELL);
+	lcsync();
+	mark(&c);
+	for (r = 10; r < 20; r++) {
+		char b[70];
+
+		for (i = 0; i < 70; i++)
+			ref[pos(r, i)/2] = (b[i] = r == 12 ? '-' : 'A' + i % 26) | ATT;
+		for (i = 0; i < 70; i += 23) {
+			lcstr(pos(r, i), b + i, i + 23 > 70 ? 70 - i : 23, ATT >> 8);
+			mmcrt(14, r*NCOL + i + 1);
+		}
+	}
+	lcsync();
+	since(&c, "string", 700, 0.06, 1.04, 2.12);
+	check("string");
+}
+
+/*
+ * The terminal's scroll over a blank row 24: row 23 comes out blank and row
+ * 24 kept, as the copy and the blank row left them, across the ring's wrap.
+ * It is refused once row 24 has text.
+ */
+static void
+blankscroll(void)
+{
+	struct cost c;
+	int r, i;
+
+	fill();
+	stuff(pos(NROW, 0), ' '|ATT, NCOL);
+	lcsync();
+	mark(&c);
+	for (r = 0; r < 30; r++) {
+		for (i = 0; i < (NROW-1)*NCOL; i++)
+			ref[i] = ref[i + NCOL];
+		for (i = 0; i < NCOL; i++)
+			ref[(NROW-1)*NCOL + i] = ' '|ATT;
+		if (!lcscroll(ATT >> 8)) {
+			printf("  FAIL blankscroll: refused with row 24 blank\n");
+			bad++;
+		}
+		putch(pos(NROW-1, r), 'a' + r | ATT);
+	}
+	lcsync();
+	since(&c, "blankscr", 30, 12, 13, 80);
+	check("blankscroll");
+	putch(pos(NROW, 5), 'x'|ATT);
+	if (lcscroll(ATT >> 8)) {
+		printf("  FAIL blankscroll: scrolled over a written row 24\n");
+		bad++;
+	}
 }
 
 int
@@ -333,8 +429,13 @@ main(int argc, char **argv)
 
 	fill(); check("fill");
 	scrollup(); check("scroll");
-	for (i = 0; i < 30; i++)
+	for (i = 0; i < 30; i++) {
 		scrollup();
+		stuff(pos(NROW-1, i), 'a' + i % 26 | (i % 3 ? ATT : 0x7000), 9);
+		putch(pos(NROW-1, i + 9), 'a' + i % 26 | (i % 3 ? ATT : 0x7000));
+		putch(pos(NROW-1, i + 10), 'A' + i % 26 | 0x7000);
+	}
+	check("scroll30");
 	fill(); check("refill");
 	scrolldown(); check("rscroll");
 	fill(); insline(5); check("insline5");
@@ -356,7 +457,8 @@ main(int argc, char **argv)
 
 	mmcrt(14, 5*NCOL + 7);
 	lcsync();
-	if (vdc.reg[14] != 0x01 || vdc.reg[15] != 0x97) {
+	if ((vdc.reg[14] << 8 | vdc.reg[15])
+	    != (vdc.reg[12] << 8 | vdc.reg[13]) + 5*NCOL + 7) {
 		printf("  FAIL cursor: R14/R15 %02x%02x\n", vdc.reg[14], vdc.reg[15]);
 		bad++;
 	} else
@@ -365,5 +467,7 @@ main(int argc, char **argv)
 		printf("  FAIL font area changed by screen operations\n");
 		bad++;
 	}
+	strings();
+	blankscroll();
 	return bad != 0;
 }

@@ -144,6 +144,114 @@ register CQUEUE *cqp;
 }
 
 /*
+ * Take up to n characters into b, as getq() would, stopping before the
+ * first one that is not printable ASCII.  Returns how many were taken.
+ */
+getqn(cqp, b, n)
+CQUEUE *cqp;
+register char *b;
+int n;
+{
+	register char *p;
+	register int m;
+	int k, s, ox, e;
+	cmap_t op;
+	cold_t om;
+
+	k = 0;
+	s = sphi();
+	csave(om);
+	while (k < n && cqp->cq_cc != 0) {
+		op = cqp->cq_op;
+		ox = cqp->cq_ox;
+		e = ox + cqp->cq_cc;
+		if (e > NCPCL)
+			e = NCPCL;
+		if (e - ox > n - k)
+			e = ox + n - k;
+		cmapv(op);
+		p = &cvirt(op)->cl_ch[ox];
+		for (m = e - ox; m != 0 && *p >= ' ' && *p <= '~'; m--)
+			*b++ = *p++;
+		crest(om);
+		e -= m + ox;
+		k += e;
+		ox += e;
+		cqp->cq_ox = ox;
+		if ((cqp->cq_cc -= e) != 0 && ox != NCPCL)
+			break;
+		cqp->cq_ox = 0;
+		cmapv(op);
+		cqp->cq_op = cvirt(op)->cl_fp;
+		cvirt(op)->cl_fp = cltfree;
+		crest(om);
+		cltfree = op;
+		if (cqp->cq_op == 0) {
+			cqp->cq_ip = 0;
+			cqp->cq_ix = 0;
+		}
+		if (cltwant) {
+			cltwant = 0;
+			wakeup((char *)&cltwant);
+		}
+	}
+	spl(s);
+	return (k);
+}
+
+/*
+ * Put the n characters at b, as putq() would.  Returns how many went in
+ * before the free list ran out.
+ */
+putqn(cqp, b, n)
+CQUEUE *cqp;
+register char *b;
+int n;
+{
+	register char *p;
+	register int m;
+	int k, s, ix;
+	cmap_t ip, np;
+	cold_t om;
+
+	k = 0;
+	s = sphi();
+	csave(om);
+	while (k < n) {
+		if ((ix = cqp->cq_ix) == 0) {
+			if ((ip = cltfree) == 0)
+				break;
+			cmapv(ip);
+			cltfree = cvirt(ip)->cl_fp;
+			cvirt(ip)->cl_fp = 0;
+			crest(om);
+			if ((np = cqp->cq_ip) == 0)
+				cqp->cq_op = ip;
+			else {
+				cmapv(np);
+				cvirt(np)->cl_fp = ip;
+				crest(om);
+			}
+			cqp->cq_ip = ip;
+		}
+		m = NCPCL - ix;
+		if (m > n - k)
+			m = n - k;
+		k += m;
+		cqp->cq_cc += m;
+		cqp->cq_ix = ix + m == NCPCL ? 0 : ix + m;
+		ip = cqp->cq_ip;
+		cmapv(ip);
+		p = &cvirt(ip)->cl_ch[ix];
+		while (m-- != 0)
+			*p++ = *b++;
+		crest(om);
+	}
+	spl(s);
+	return (k);
+}
+
+/*
  * Clear a character queue.
  */
 clrq(cqp)

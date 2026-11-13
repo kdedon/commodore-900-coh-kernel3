@@ -18,10 +18,11 @@
 #define	LCPOLL	2000		/* ready polls before giving up */
 
 /* VRAM layout */
-#define	LCTEXT	0x0000		/* 80x25 character codes */
-#define	LCATTR	0x0800		/* 80x25 attributes */
+#define	LCTEXT	0x0000		/* character codes, the screen anywhere within */
+#define	LCATTR	0x1000		/* attributes, at the same offset */
+#define	LCRING	0x1000		/* bytes in each of the two */
 #define	LCFONT	0x2000		/* 256 glyphs, 16 bytes each */
-#define	LCSCR	0x4000		/* scratch for overlapping copies */
+#define	LCSCR	0x3000		/* scratch for overlapping copies */
 
 /* Registers */
 #define	LCR_CURST	10	/* cursor mode and start line */

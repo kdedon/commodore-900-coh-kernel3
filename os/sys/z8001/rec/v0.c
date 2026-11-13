@@ -23,6 +23,9 @@
 #include <uproc.h>
 #include <sched.h>
 #include <signal.h>
+#ifdef LC8563
+#include <sys/lcio.h>
+#endif
 
 int mmstart();
 
@@ -39,6 +42,12 @@ int m;
 {
 	register int s;
 
+#ifdef LC8563
+	if (minor(dev) == LCVMINOR) {
+		lcvopen(dev, m);
+		return;
+	}
+#endif
 	if (minor(dev) != 0) {
 		u.u_error = ENXIO;
 		return;
@@ -63,6 +72,12 @@ v0close(dev)
 {
 	register int s;
 
+#ifdef LC8563
+	if (minor(dev) == LCVMINOR) {
+		lcvclose(dev);
+		return;
+	}
+#endif
 	s = sphi();
 	if (--kvtty.t_open == 0)
 		ttclose(&kvtty);
@@ -74,6 +89,12 @@ v0read(dev, iop)
 dev_t dev;
 IO *iop;
 {
+#ifdef LC8563
+	if (minor(dev) == LCVMINOR) {
+		lcvread(dev, iop);
+		return;
+	}
+#endif
 	ttread(&kvtty, iop, SFCW);
 }
 
@@ -81,6 +102,12 @@ v0write(dev, iop)
 dev_t dev;
 IO *iop;
 {
+#ifdef LC8563
+	if (minor(dev) == LCVMINOR) {
+		lcvwrite(dev, iop);
+		return;
+	}
+#endif
 	ttwrite(&kvtty, iop, SFCW);
 }
 
@@ -90,6 +117,12 @@ struct sgttyb *vec;
 {
 	register int s;
 
+#ifdef LC8563
+	if (minor(dev) == LCVMINOR) {
+		lcvioctl(dev, com, (char *)vec);
+		return;
+	}
+#endif
 	switch (com) {
 	case TIOVGETB:
 	case TIOVPUTB:
