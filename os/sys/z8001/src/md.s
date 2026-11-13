@@ -312,7 +312,7 @@ u_	= 0x3F000000			/ SS | 0
 	.shri
 	.globl	etext_, edata_, end_
 	.globl	corebot_, romconf_
-	.globl	main_, commodore_, stand_
+	.globl	main_, commodore_, stand_, gdsinit_
 	.globl	start			/ exported so ld -e can target it (ROM entry)
 
 start:
@@ -351,6 +351,7 @@ start:
 	call	commodore_		/ Do machine-specific initialisation
 
 	call	vidsel			/ Probe video RAM, choose console driver
+	call	gdsinit_		/ Place GDS; may raise corebot
 
 / Set up U-area mapping at corebot
 / corebot is the 3.2 MI's 4-byte paddr_t (var.c) holding a physical
@@ -1337,7 +1338,7 @@ _idle_:
 / The hi-res card comes in three jumpered variants and 404H names which one is
 / fitted in its F1:F0 field (1 = 640x400x4 colour, 2 = 1024x800 mono,
 / 3 = 1024x1024 mono); /drv/hrtty renders 1 bit per pixel at 128 bytes per
-/ raster, which is variant 2 alone.  The variant the driver accepts is the
+/ raster, which is variants 2 and 3.  The variant the driver accepts is the
 / patchable `hrmode' (commodore.c); the raw byte goes to `hrconf' for
 / hrreport() to print, since nothing can print here.  A board that answers
 / anything else falls through to the text card and then to the serial line: a
@@ -1349,17 +1350,19 @@ _idle_:
 / 404H then says WHICH board, and F1:F0 = 0 means "no card": a board that
 / answered vprobe cannot also be absent, so a zero here is a read side that is
 / not driven, and the probe stands.  Only a variant hrtty cannot plot on -- 1
-/ (640x400x4 colour) or 3 (1024x1024) -- hands the console to the next board.
+/ (640x400x4 colour) -- hands the console to the next board.
 vidsel:
 	ld	r0, $0x3E00		/ hi-res framebuffer 0x3E0000 >> 8
 	call	vprobe
 	jr	eq, 1f			/ absent: try the text card
-	inb	rl0, HRCONF		/ the board's own identity
+	in	r0, HRCONF		/ the board's own identity, on the low lane
 	subb	rh0, rh0
 	ld	hrconf_, r0		/ raw, for hrreport()
 	and	r0, $HRIDM
 	jr	eq, 2f			/ undriven read side: vprobe found the board
-	cp	r0, hrmode_		/ the one variant hrtty can draw on
+	cp	r0, hrmode_		/ the variant hrtty draws on
+	jr	eq, 2f
+	cp	r0, $3			/ 1024x1024: the same rasters, more of them
 	jr	ne, 1f			/ another board: leave its screen alone
 2:	ld	r0, $driv_hr-icode
 	ld	icarg2_, r0		/ patch argv[2] offset -> /drv/hrtty

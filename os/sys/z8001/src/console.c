@@ -101,7 +101,7 @@ sccinit()
  * the machine's output is byte-for-byte what it always was.
  *
  * Both renderers reach the screen through virtual segments BMS and BMS+1, and
- * commodore() has since pointed those at BMPHYS, so their bases are put back
+ * commodore() has since pointed those at bmphys, so their bases are put back
  * across the call and restored after it.  Only the base moves: the attributes
  * and limits md.s left on those two segments are the ROM's own values.
  *
@@ -125,6 +125,7 @@ sccinit()
 static	int	(*romputc)() = (int (*)())ROMPUTC;
 static	int	romcsel;	/* Which console the ROM selected */
 static	paddr_t	romcfb;		/* Physical base of that screen */
+extern	paddr_t	bmphys;		/* Where BMS points between calls */
 
 /*
  * Print a character on the screen the ROM selected, if it selected one.
@@ -150,8 +151,8 @@ register int c;
 	pfix(BMS, romcfb);
 	pfix(BMS+1, romcfb+0x00010000L);
 	(*romputc)(c);
-	pfix(BMS, BMPHYS);
-	pfix(BMS+1, BMPHYS+0x00010000L);
+	pfix(BMS, bmphys);
+	pfix(BMS+1, bmphys+0x00010000L);
 }
 
 /*

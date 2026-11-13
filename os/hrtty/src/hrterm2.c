@@ -10,6 +10,7 @@
 #include	"../h/font.h"
 
 extern	unsigned short	nulls[];
+extern	int	hrrows;		/* 800, or 1024: cleared so no garbage shows */
 
 /*
 **	The loadable character-set bank.  Uninitialized, so it costs nothing in
@@ -41,7 +42,7 @@ ricoload()
 /*			*sp++ = 0xffff;		####	*/
 			*sp++ = 0x0;
 	sp = SEG1;
-	for(i = 0; i< 800-512; i++)
+	for(i = 0; i< hrrows-512; i++)
 		for(j = 0; j < 1024/16; j++)
 /*			*sp++ = 0xffff;		####	*/
 			*sp++ = 0x0;

@@ -13,6 +13,7 @@
 #include	<uproc.h>
 #include	<signal.h>
 #include	<sys/hrio.h>
+#include	<sys/gdisp.h>
 #include	"../h/font.h"
 
 #define NMINOR 1
@@ -43,6 +44,34 @@ v0load()
 	portst();			/* Init MMU EELCECH !! */
 	hrfseed();			/* High bank from gall.c */
 	ricoload();			/* Clear Screen, etc. */
+	gdpub();
+}
+
+/*
+**	Tell the window system what the screen is.
+*/
+gdpub()
+{
+	register struct gdisp *gp;
+	extern int hrconf;
+
+	gp = (struct gdisp *)ADDR(GDS, GD_OFF);
+	gp->gd_version = GD_VERSION;
+	gp->gd_width = 1024;
+	gp->gd_height = hrrows;
+	gp->gd_depth = 1;
+	gp->gd_stride = 128;
+	gp->gd_flags = GDF_MAPPED;
+	gp->gd_card = GDC_HR | (hrconf & 0xFF) << 8;
+	gp->gd_seg = BMS;
+	gp->gd_nseg = 2;
+	gp->gd_split = 512;
+	gp->gd_splitx = 0;
+	gp->gd_xasp = 1;
+	gp->gd_yasp = 1;
+	gp->gd_vram = 128;
+	gp->gd_gdsram = gdsram;
+	gp->gd_magic = GD_MAGIC;
 }
 
 v0uload()

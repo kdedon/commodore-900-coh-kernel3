@@ -135,6 +135,7 @@
  * It is the card RAM past the visible bitmap.  The hi-res board decodes 128 KB
  * at 0x3E0000 and the 1024x800 frame occupies the first 100 KB, leaving the
  * 28 KB from GDSPHYS to the end of the board unread by the video hardware.
+ * Any other screen leaves no such tail, and gdsinit() gives GDS system RAM.
  * GDSSIZE is the size the clients compile against (hr/include/shmem.h
  * HRTAILSZ) and md.s gives the segment that limit.
  */

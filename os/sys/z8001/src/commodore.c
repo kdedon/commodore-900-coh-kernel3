@@ -33,6 +33,7 @@
 #include <alloc.h>
 #include <sys/bootinfo.h>
 #include <sys/memmap.h>
+#include <sys/gdisp.h>
 
 /* Z8010 descriptor attribute: CPU inhibit. */
 #define	HA_CPUI	0x04
@@ -69,6 +70,20 @@ static	int	nviskip;	/* a no-progress step trap was retried */
 int	hrmode = 2;			/* 1024x800 mono, 1 bit per pixel */
 int	hrconf = -1;			/* raw 404H byte; -1 = no board */
 
+/*
+ * Rasters on a mono board.  The 1024x1024 board reads 2 at 404H like the
+ * 1024x800 one, so only the boot can say which is fitted: kboot.cfg's
+ * `flags HR1024', a 404H that does read 3, or patching this to 1024.
+ */
+int	hrrows = 800;
+int	gdsram;				/* GDS lives in system RAM */
+paddr_t	bmphys = BMPHYS;		/* where BMS points when no console moves it */
+extern	int	vcfound;
+
+#ifndef	BF_HR1024
+#define	BF_HR1024	0x0002		/* kboot.cfg: bflag HR1024 2 */
+#endif
+
 static char *hrvariant[] = {
 	"absent",
 	"640x400x4 colour",
@@ -86,9 +101,11 @@ hrreport()
 	printf("hi-res video: 404H=%x, %s\n", hrconf, hrvariant[m]);
 	if (m == 0)
 		printf("hi-res video: read side not driven -- board found by probe\n");
-	else if (m != hrmode)
+	else if (m != hrmode && m != 3)
 		printf("hi-res video: not %s -- console falls through\n",
 			hrvariant[hrmode & 3]);
+	if (hrrows == 1024 && m != 3)
+		printf("hi-res video: driven as 1024x1024\n");
 }
 
 extern struct bootinfo bootinfo;	/* the handoff block, defined with wd(4)'s
@@ -164,6 +181,8 @@ memreport()
 		printf("memory: %u segments refused above 16M\n", memover);
 	if (memcrowd != 0)
 		printf("memory: more runs than slots -- the high ones dropped\n");
+	if (gdsram)
+		printf("memory: 28KB below the kernel's pool for the window system\n");
 }
 
 /*
@@ -242,9 +261,44 @@ commodore()
 	 * physical address, so it is programmed the way every other mapping
 	 * segment's is.
 	 */
-	pfix(BMS, BMPHYS);
-	pfix(BMS+1, BMPHYS+0x00010000L);
+	pfix(BMS, bmphys);
+	pfix(BMS+1, bmphys+0x00010000L);
 	pfix(GDS, GDSPHYS);
+}
+
+/*
+ * Where GDS lives, decided once the video probe has run and before the u-area
+ * is placed at corebot.  The 1024x800 board leaves 28 KB of its RAM unshown,
+ * and GDS stays there.  Every other screen the window system can use shows all
+ * of its RAM or keeps it behind a chip, so GDS takes system RAM below corebot,
+ * where nothing ever moves or swaps it.
+ */
+gdsinit()
+{
+	register int m;
+	paddr_t p;
+
+	m = hrconf < 0 ? -1 : hrconf & 3;
+	if (m == 1) {
+		/* No console driver maps the colour board, so map it here. */
+		bmphys = 0x003E0000L;
+		pfix(BMS, bmphys);
+		pfix(BMS+1, bmphys+0x00010000L);
+	}
+	if (m == 3 || memsrc == 1 && (bootinfo.bi_flags & BF_HR1024) != 0)
+		hrrows = 1024;
+	if ((m == 0 || m == 2) && hrrows == 800 || m < 0 && vcfound == 0)
+		return;
+	p = corebot;
+	if (p + GDSSIZE > ramrun[0].ra_top) {
+		hrrows = 800;
+		return;
+	}
+	corebot = p + GDSSIZE;
+	msize -= btocrd((paddr_t)GDSSIZE);
+	pclear(p, (fsize_t)GDSSIZE);
+	pfix(GDS, p);
+	gdsram = 1;
 }
 
 /*
