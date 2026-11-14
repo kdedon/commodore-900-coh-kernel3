@@ -95,7 +95,7 @@ map_drv() {	# map_drv <name> <os-relative source path>...
 	echo >> "$MAP"
 }
 
-# notty: serial console (major 8); alternatives are lrtty, lctty or hrtty for displays.
+# notty: serial console (major 8); alternatives are lrtty, lctty, hrtty or hrctty for displays.
 if cc_one "$OS/sys/z8001/drv/notty.c"; then
 	link_drv notty "$OBJ/notty.o"
 	map_drv notty sys/z8001/drv/notty.c
@@ -135,6 +135,24 @@ then
 	map_drv lctty sys/z8001/rec
 else
 	fail_drv lctty
+fi
+
+# hrctty: lrtty's terminal on the HI-RES card's 640x400 colour bitmap; hrc.c
+# replaces mmas.s and draws 8x16 cells from hrcfont.c.
+if cc_one "$OS/sys/z8001/rec/kv.c" &&
+   cc_one "$OS/sys/z8001/rec/v0.c" -DHRC &&
+   cc_one "$OS/sys/z8001/rec/mm.c" -DHRC &&
+   cc_one "$OS/sys/z8001/rec/kb.c" &&
+   cc_one "$OS/sys/z8001/rec/kbtab.c" &&
+   cc_one "$OS/sys/z8001/rec/hrc.c" &&
+   cc_one "$OS/sys/z8001/rec/hrcfont.c" &&
+   as_one "$OS/sys/z8001/rec/hrcas.s"
+then
+	link_drv hrctty "$OBJ/kv.o" "$OBJ/v0.o" "$OBJ/mm.o" "$OBJ/hrc.o" \
+		       "$OBJ/hrcfont.o" "$OBJ/hrcas.o" "$OBJ/kb.o" "$OBJ/kbtab.o"
+	map_drv hrctty sys/z8001/rec
+else
+	fail_drv hrctty
 fi
 
 # hrtty: keyboard + HI-RES BITMAP console at major 8; sources use os/hrtty/h on include path.

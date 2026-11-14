@@ -57,11 +57,12 @@ static	int	nviskip;	/* a no-progress step trap was retried */
  *
  * `hrmode' is the variant /drv/hrtty can draw on: it plots 1 bit per pixel at
  * BPERSL = 128 bytes per raster over 800 rasters, which is variant 2 and
- * nothing else.  vidsel (md.s) compares F1:F0 against it and hands the console
- * to the next board in the probe order when they differ.  It is patchable for
- * the case this cannot distinguish: a board whose read side is not driven
- * answers with the bus, not with 0, and a machine refusing a console it can in
- * fact drive is fixed by patching `hrmode' to what `hrconf' below reports.
+ * nothing else.  vidsel (md.s) compares F1:F0 against it, gives variant 1 to
+ * /drv/hrctty, and hands the console to the next board in the probe order
+ * otherwise.  It is patchable for the case this cannot distinguish: a board
+ * whose read side is not driven answers with the bus, not with 0, and a
+ * machine refusing a console it can in fact drive is fixed by patching
+ * `hrmode' to what `hrconf' below reports.
  *
  * `hrconf' is the raw byte, -1 when no hi-res frame buffer answered vprobe at
  * all.  vidsel cannot print -- it runs before main() -- so it records, and
@@ -101,7 +102,7 @@ hrreport()
 	printf("hi-res video: 404H=%x, %s\n", hrconf, hrvariant[m]);
 	if (m == 0)
 		printf("hi-res video: read side not driven -- board found by probe\n");
-	else if (m != hrmode && m != 3)
+	else if (m != hrmode && m != 3 && m != 1)
 		printf("hi-res video: not %s -- console falls through\n",
 			hrvariant[hrmode & 3]);
 	if (hrrows == 1024 && m != 3)
@@ -280,7 +281,7 @@ gdsinit()
 
 	m = hrconf < 0 ? -1 : hrconf & 3;
 	if (m == 1) {
-		/* No console driver maps the colour board, so map it here. */
+		/* Map the colour board for the window system. */
 		bmphys = 0x003E0000L;
 		pfix(BMS, bmphys);
 		pfix(BMS+1, bmphys+0x00010000L);
@@ -304,9 +305,9 @@ gdsinit()
 }
 
 /*
- * The colour board has no console driver, so its descriptor is written here.
- * Four bits a pixel, 320 bytes a raster: the first 64 KB ends 256 bytes into
- * raster 204.
+ * The colour board's console publishes nothing, so its descriptor is written
+ * here.  Four bits a pixel, 320 bytes a raster: the first 64 KB ends 256 bytes
+ * into raster 204.
  */
 gdrgbi()
 {

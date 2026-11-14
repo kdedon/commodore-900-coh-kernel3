@@ -26,6 +26,9 @@
 #ifdef LC8563
 #include <sys/lcio.h>
 #endif
+#ifdef HRC
+#include <sys/hrio.h>
+#endif
 
 int mmstart();
 
@@ -141,6 +144,13 @@ struct sgttyb *vec;
 		}
 		mmioctl(com, vec);
 		return;
+#ifdef HRC
+	case HRIOCSTOP:
+	case HRIOCSTART:
+		hcctl(com == HRIOCSTOP);
+		mmstart(&kvtty);
+		return;
+#endif
 	}
 	s = sphi();
 	ttioctl(&kvtty, com, vec);
@@ -153,6 +163,9 @@ v0load()
 }
 v0uload()
 {
+#ifdef HRC
+	hcuload();
+#endif
 }
 v0in(c)
 {

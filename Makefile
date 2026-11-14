@@ -81,7 +81,7 @@ $(HB)/kobj/kernel.out: $(HB)/link-kernel.sh $(HB)/wdbtab-hd21.h $(KSRC) $(KVFILE
 
 # --- drivers --------------------------------------------------------------
 DRIVERS = $(HB)/build/drv/notty $(HB)/build/drv/lrtty $(HB)/build/drv/lctty \
-	  $(HB)/build/drv/hrtty $(HB)/build/drv/hostfs
+	  $(HB)/build/drv/hrtty $(HB)/build/drv/hrctty $(HB)/build/drv/hostfs
 drivers: $(DRIVERS)
 # One script builds them all; grouped to prevent concurrent invocation.
 DRVSRC := $(shell find $(OS)/sys/z8001/drv $(OS)/sys/z8001/rec $(OS)/hrtty \

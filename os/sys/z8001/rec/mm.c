@@ -39,6 +39,20 @@
 #define ismmfunc(c)	/* ismmfunc(c) */
 #define initkeys()	/* initkeys() */
 
+/*
+ * The hi-res card's colour bitmap is drawn like the 8563: from cells kept by
+ * the back end.  Its entry points are the same ones under other names.
+ */
+#ifdef HRC
+#define	LC8563
+#define	lcinit		hcinit
+#define	lcchar		hcchar
+#define	lcstr		hcstr
+#define	lcscroll	hcscroll
+#define	lcsync		hcsync
+#define	lchold		hchold
+#endif
+
 #include <coherent.h>
 
 #if	0
@@ -230,13 +244,22 @@ register TTY *tp;
 	}
 	busy = 1;
 	for (;;) {
-		if ((n = ttoutn(tp, b, sizeof(b))) == 0)
+		if ((n = ttoutn(tp, b, sizeof(b))) == 0) {
+#ifdef HRC
+			/* Output queued while the bitmap was drawn. */
+			lcsync();
+			if (tp->t_oq.cq_cc != 0)
+				continue;
+#endif
 			break;
+		}
 		splo();
 		mmputs(b, n);
 		sphi();
 	}
+#ifndef HRC
 	lcsync();
+#endif
 	busy = 0;
 	spl(s);
 #else

@@ -24,5 +24,7 @@ use console-hr      mwc-bsd3   hrtty/ is the 0.7.3-era hi-res terminal driver
 use console-lr      mwc-bsd3   sys/z8001/rec/ is the 0.7.3-era keyboard and text console driver
 use console-lc      mwc-bsd3   sys/z8001/rec/ is the 0.7.3-era keyboard and text console driver
 use console-lc      mit-oc     sys/z8001/rec/lc.c is this project's 8563 back end
+use console-hrc     mwc-bsd3   sys/z8001/rec/ is the 0.7.3-era keyboard and text console driver
+use console-hrc     mit-oc     sys/z8001/rec/hrc.c and hrcfont.c are this project's colour back end; the glyphs are the public-domain misc-fixed 8x13
 use console-serial  mwc-bsd3   compiled against the MWC kernel headers, and documented by an MWC article
 use console-serial  mit-oc     sys/z8001/drv/notty.c is this project's redirect to the al line

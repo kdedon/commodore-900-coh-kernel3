@@ -1338,19 +1338,19 @@ _idle_:
 / The hi-res card comes in three jumpered variants and 404H names which one is
 / fitted in its F1:F0 field (1 = 640x400x4 colour, 2 = 1024x800 mono,
 / 3 = 1024x1024 mono); /drv/hrtty renders 1 bit per pixel at 128 bytes per
-/ raster, which is variants 2 and 3.  The variant the driver accepts is the
-/ patchable `hrmode' (commodore.c); the raw byte goes to `hrconf' for
-/ hrreport() to print, since nothing can print here.  A board that answers
-/ anything else falls through to the text card and then to the serial line: a
-/ console that refuses beats one that draws garbage on the wrong geometry.
+/ raster, which is variants 2 and 3, and /drv/hrctty draws on variant 1.  The
+/ variant hrtty accepts is the patchable `hrmode' (commodore.c); the raw byte
+/ goes to `hrconf' for hrreport() to print, since nothing can print here.  A
+/ board that answers anything else falls through to the text card and then to
+/ the serial line: a console that refuses beats one that draws garbage on the
+/ wrong geometry.
 /
 / The read is meaningful only AFTER vprobe, and only when it reports a variant.
 / vprobe answers from the memory layout -- a framebuffer either responds at
 / 0x3E0000 or it does not -- so it is the authority on whether a board is there.
 / 404H then says WHICH board, and F1:F0 = 0 means "no card": a board that
 / answered vprobe cannot also be absent, so a zero here is a read side that is
-/ not driven, and the probe stands.  Only a variant hrtty cannot plot on -- 1
-/ (640x400x4 colour) -- hands the console to the next board.
+/ not driven, and the probe stands.
 vidsel:
 	ld	r0, $0x3E00		/ hi-res framebuffer 0x3E0000 >> 8
 	call	vprobe
@@ -1363,7 +1363,12 @@ vidsel:
 	cp	r0, hrmode_		/ the variant hrtty draws on
 	jr	eq, 2f
 	cp	r0, $3			/ 1024x1024: the same rasters, more of them
+	jr	eq, 2f
+	cp	r0, $1			/ 640x400x4 colour
 	jr	ne, 1f			/ another board: leave its screen alone
+	ld	r0, $driv_hc-icode
+	ld	icarg2_, r0		/ patch argv[2] offset -> /drv/hrctty
+	ret
 2:	ld	r0, $driv_hr-icode
 	ld	icarg2_, r0		/ patch argv[2] offset -> /drv/hrtty
 	ret
@@ -1453,7 +1458,7 @@ argv:	.word	USEG, file-icode
 icarg1_: .word	swap-icode	/ bootpatch: -> fl_su for single user
 	.word	USEG
 	.globl	icarg2_
-icarg2_: .word	driv_no-icode	/ vidsel/bootpatch: -> driv_hr, driv_lr, driv_lc, driv_no
+icarg2_: .word	driv_no-icode	/ vidsel/bootpatch: -> driv_hr, driv_hc, driv_lr, driv_lc, driv_no
 	.long	0
 
 file:	.ascii	"/etc/init"
@@ -1465,6 +1470,8 @@ fl_su:	.ascii	"-s"		/ come up single user (bootinfo.h BF_SINGLE)
 driv_no: .ascii	"/drv/notty"		/ serial console (compiled default)
 	.byte	0
 driv_hr: .ascii	"/drv/hrtty"		/ hi-res bitmap console (0x3E0000)
+	.byte	0
+driv_hc: .ascii	"/drv/hrctty"		/ hi-res colour bitmap console
 	.byte	0
 driv_lr: .ascii	"/drv/lrtty"		/ lo-res 6845 text console (0x370000)
 	.byte	0

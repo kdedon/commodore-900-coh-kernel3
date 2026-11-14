@@ -1,0 +1,19 @@
+# console-hrc.list -- the hi-res card's 640x400 colour bitmap console at major 8.
+#
+# /drv/hrctty is lrtty's terminal (sys/z8001/rec/{kv,v0,mm,kb,kbtab}.c, mm.c
+# and v0.c built with HRC) over hrc.c, which draws 80x25 cells of 8x16 pixels
+# from hrcfont.c.  vidsel selects it when the framebuffer at 0x3E0000 answers
+# and 404H names the colour variant.
+# PACKAGE.  See console-serial.list: a per-machine variant, not a choice.
+package  console-hrc
+role     variant
+# KINDS -- see commodore-900-dist's os/dist/PACKAGE-FORMAT.  `bin' is the
+# list below; `src' is the complete corresponding source for every executable it
+# installs and `man' the pages for those programs.  Both refuse to be cut from a
+# guess.
+kinds    src man
+# A driver is documented under the device it provides, not under its file name:
+# console(1) is the console's escape sequences, kb(1) the keyboard it reads.
+articles hrctty console kb
+
+f	/drv/hrctty	755 0 1

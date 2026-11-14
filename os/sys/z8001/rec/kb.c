@@ -146,6 +146,16 @@ kbuload()
 	clrivec(KBIRQ);
 }
 
+/* Whether the keyboard's interrupt is still this driver's. */
+kbmine()
+{
+	extern int (*vecs[])();
+	extern saddr_t vmaps[];
+
+	return (vecs[KBIRQ>>1] == (int (*)())kbintr
+	    && vmaps[KBIRQ>>1] == omapget());
+}
+
 kbopen(dev, m)
 dev_t dev;
 int m;
