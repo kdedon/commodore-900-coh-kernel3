@@ -548,6 +548,8 @@ int msec;
 	auto	 int	rev;		/* last event report received	 */
 	auto	 int	nev;		/* number non-zero event reports */
 	auto	 int	i;
+	auto	 int	s;
+	auto	 long	end;		/* lbolt at which a timed poll expires */
 	extern	 char *	udl;
 
 	/*
@@ -582,6 +584,13 @@ int msec;
 			return;
 		}
 	}
+
+	/*
+	 * One deadline for the whole call: a wake that finds nothing ready
+	 * goes back to sleep for what is left, not for a fresh timeout.
+	 */
+	if ( msec > 0 )
+		end = lbolt + msec / (1000 / HZ) + (msec % (1000 / HZ) != 0);
 
 	for (;;) {
 		/*
@@ -716,15 +725,10 @@ int msec;
 		 * from any queue it is already on -- that is what t_last is for
 		 * -- so re-arming is safe and is the intended use.
 		 */
-		if ( msec > 0 ) {
-			/*
-			 * Convert milliseconds to clock ticks.
-			 */
-			msec += (1000 / HZ) - 1;
-			msec /= (1000 / HZ);
-			timeout( &cprocp->p_polltim, msec,
+		if ( msec > 0 )
+			timeout( &cprocp->p_polltim,
+				 end > lbolt ? (unsigned)(end - lbolt) : 0,
 				 wakeup, &cprocp->p_polls );
-		}
 
 		/*
 		 * Wake for polled event, poll timeout, or signal.
@@ -738,7 +742,11 @@ int msec;
 		 * entry (z8001/src/trap.c) with the buffers still linked, so
 		 * anything that changes it has to move the unlink with it.
 		 */
-		sleep( &cprocp->p_polls, CVTTOUT, IVTTOUT, SVTTOUT );
+		s = sphi();
+		if ( !pollfired()
+		  && !((msec > 0) && (cprocp->p_polltim.t_lbolt <= lbolt)) )
+			sleep( &cprocp->p_polls, CVTTOUT, IVTTOUT, SVTTOUT );
+		spl( s );
 
 		/*
 		 * Terminate event monitoring.

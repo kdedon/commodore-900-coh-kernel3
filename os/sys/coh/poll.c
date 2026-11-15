@@ -19,6 +19,7 @@
  *	int pollopen(qp) -- enable polling  by current process  on given queue
  *	int pollwake(qp) -- wake all processes waiting for poll on given queue
  *	int pollexit(  ) -- terminate all polls enabled by current process
+ *	int pollfired( ) -- has any poll of the current process been woken
  *	event_t * ep;
  *
  * A queue head `qp' may be a datum of a LOADABLE driver, reachable only while
@@ -66,6 +67,7 @@ int	NPOLL  = 0;
 typedef struct pev {
 	event_t	pe_ev;			/* as the device queues see it	*/
 	dold_t	pe_map;			/* driver window of the head	*/
+	int	pe_fired;		/* pollwake() reached this buffer */
 } PEV;
 
 #define	emap(ep)	(((PEV *) (ep))->pe_map)
@@ -159,6 +161,7 @@ register event_t * qp;
 	 * The caller is the queue's own driver, so the window is its own.
 	 */
 	dsave( emap(ep) );
+	((PEV *) ep)->pe_fired = 0;
 
 	/*
 	 * Insert event at head of process event singularly-linked queue.
@@ -209,10 +212,14 @@ event_t * qp;
 		 */
 		while ( ep != qp ) {
 			/*
-			 * Wake process if it is sleeping.
+			 * Wake process if it is sleeping; if it is not yet,
+			 * pollfired() stops it going to sleep.
 			 */
-			if ( (pp = ep->e_procp) && (pp->p_state == PSSLEEP) )
-				wakeup( &pp->p_polls );
+			if ( pp = ep->e_procp ) {
+				((PEV *) ep)->pe_fired = 1;
+				if ( pp->p_state == PSSLEEP )
+					wakeup( &pp->p_polls );
+			}
 
 			ep = ep->e_dnext;
 		}
@@ -263,4 +270,22 @@ pollexit()
 		ep->e_pnext = efreep;
 		efreep = ep;
 	}
+}
+
+/**
+ *
+ * int
+ * pollfired() -- nonzero if pollwake() reached any poll of the current process
+ *
+ * Call with interrupts off, immediately before sleeping on p_polls.
+ */
+int
+pollfired()
+{
+	register event_t * ep;
+
+	for ( ep = cprocp->p_polls; ep; ep = ep->e_pnext )
+		if ( ((PEV *) ep)->pe_fired )
+			return 1;
+	return 0;
 }
