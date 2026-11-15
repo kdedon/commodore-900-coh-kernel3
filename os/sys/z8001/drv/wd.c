@@ -157,9 +157,7 @@ extern int	bootser;
 #define	NPSEUDO	bootinfo.bi_npart
 
 /*
- * drive & controller parameters used during initialization. 
- * note that the parameters are used for both drives by the controller
- * (sorry, no mix and match on drive types).
+ * drive & controller parameters, one block per hard disk.
  */
 typedef	struct	wdp {
 	unsigned char	p_options;	/* options <7:4>, step rate <3:0> */
@@ -177,6 +175,15 @@ WDP	wdparam = {			/* patch these values as needed: */
 	128 / 16,			/* reduced write cur. at cyl 128. */
 	17				/* number of sectors per track */
 };
+WDP	wdparam1 = { 0 };		/* drive 1; no sectors: same as drive 0 */
+
+/*
+ * The card keeps one parameter set for both drives, so it is re-sent
+ * whenever the next command goes to a drive with other parameters.
+ */
+#define	wdpset(d)	((d) == 1 && wdparam1.p_nsectors != 0)
+int	wdsdpdrv = -1;			/* wdpset() the card holds, -1 none */
+bool	wdsdpbusy;			/* a WDSDP is in flight */
 
 /*
  * housekeeping
@@ -305,7 +312,10 @@ wdload()
 	wdtab.wdu_active = 0;
 	wdtab.wdu_bnci = 0;
 	setivec(WDVEC, wdintr);
-	wdsetparam();
+	wdcmdclr((WDCMD *) pfix(WDS, CFCMDBLKPADDR));
+	wdcmdclr((WDCMD *) pfix(WDS, WDCMDBLKPADDR));
+	wdsdpdrv = -1;
+	wdsdpbusy = FALSE;
 }
 
 
@@ -507,6 +517,12 @@ wdstart()
 	wdtab.wdu_paddr = bp->b_paddr + ((paddr_t)wdtab.wdu_bnci << 9);
 	d = drive(minor(bp->b_dev));
 	pd = pseudo(minor(bp->b_dev));
+	if (d < NHDISKS && wdpset(d) != wdsdpdrv) {
+		wdtab.wdu_active = TRUE;
+		wdsdpbusy = TRUE;
+		wdsetparam(d);
+		return (TRUE);
+	}
 	wdtab.wdu_dma_aligned = TRUE;
 	if ((wdtab.wdu_paddr&0x1FFL) != 0 && nblk != 0)
 		wdtab.wdu_dma_aligned = FALSE;	/* bounce, one sector at a time */
@@ -559,6 +575,15 @@ wdintr()
 			cbp = (WDCMD *) pfix(WDS, CFCMDBLKPADDR); /* floppy */
 		else
 			cbp = (WDCMD *) pfix(WDS, WDCMDBLKPADDR); /* hard */
+		if (wdsdpbusy && (cbp->c_errorbits & 0x7F) == 0) {
+			wdsdpbusy = FALSE;
+			wdsdpdrv = wdpset(d);
+			wdtab.wdu_active = 0;
+			out(WDIO, 0);
+			while (!wdstart())
+				;
+			return;
+		}
 		if ((cbp->c_errorbits & 0x7F) == 0) {
 			if (!wdtab.wdu_dma_aligned) {
 			    if (bp->b_req == BREAD)
@@ -579,6 +604,9 @@ wdintr()
 			bdone(bp);
 		} else {
 			wdtab.wdu_bnci = 0;
+			wdsdpbusy = FALSE;
+			if (d < NHDISKS)
+				wdsdpdrv = -1;
 			wdharderr(bp, cbp);
 		}
 		wdtab.wdu_forw->wdu_active = 0;
@@ -796,27 +824,27 @@ register WDCMD	*cbp;
 #endif
 
 /*
- * perform controller and drive initialization. note that the parameters
- * given to the controller are used for both hard disk drives.
- * note that we have to make sure that both command blocks have been 
- * cleared to avoid problems with controller interaction.
+ * load hard disk d's parameters into the controller.
  */
-wdsetparam()
+wdsetparam(d)
+int	d;
 {
 	register WDCMD *cbp;			/* cmd block pointer */
 	register WDP *dpp;			/* drive param pointer */
 
-	cbp = (WDCMD *) pfix(WDS, CFCMDBLKPADDR); /* map onto cmd block */
-	wdcmdclr(cbp);				/* clear out block */
-	cbp = (WDCMD *) pfix(WDS, WDCMDBLKPADDR); /* now hard disk cmd blk */
+	cbp = (WDCMD *) pfix(WDS, WDCMDBLKPADDR);
 	wdcmdclr(cbp);				/* clear out block */
 	cbp->c_highdma = (WDBUFPADDR >> 16) & 0xFF;
 	cbp->c_middma =  (WDBUFPADDR >> 8) & 0xFF;
 	cbp->c_lowdma =  (WDBUFPADDR) & 0xFF;
+	cbp->wdcmdu.wdcmdop.c_lunhiaddr = d << 5;
 	cbp->c_op = WDSDP;			/* set drive params */
 	cbp->c_errorbits = 0xFF;		/* mark block as valid */
 	dpp = (WDP *) pfix(WDS, WDBUFPADDR);
-	*dpp = wdparam;				/* to achieve DMA alignment */
+	if (wdpset(d))
+		*dpp = wdparam1;
+	else
+		*dpp = wdparam;			/* to achieve DMA alignment */
 	out(WDIO, 1);				/* strobe line to DMA part */
 }
 

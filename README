@@ -32,6 +32,21 @@ takes the toolchain's latest release; `make deps DEP=toolchain` fetches it.
 This repository builds kernel artifacts only. Disk images and userland are
 built in their respective repositories.
 
+Two hard disks
+--------------
+
+The kernel drives a second hard disk of a different geometry, with limits:
+
+- Drive 1's geometry must be patched into `/coherent` at the symbol
+  `wdparam1_`: 6 bytes `0f`, `heads<<4 | cyl>>8`, `cyl & ff`, `precomp/16`,
+  `precomp/16`, `sectors`. Left zero, drive 1 is taken to match drive 0.
+- Drive 1 uses drive 0's partition table, so its partitions must fit drive 1.
+- No `/dev` nodes for drive 1 are shipped. Its minor is 0x10 + partition:
+
+      /etc/mknod /dev/hd17 b 2 17; /etc/mknod /dev/rhd17 c 2 17
+
+- Each switch between drives costs one extra controller command.
+
 License
 -------
 
