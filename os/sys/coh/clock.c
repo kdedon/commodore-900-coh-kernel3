@@ -270,7 +270,7 @@ stand()
 		/*
 		 * Remove timing list from queue, creating new temporary queue.
 		 */
-		tp = (TIM *) &timq[ lbolt % nel(timq) ];
+		tp = (TIM *) &timq[ (unsigned long)lbolt % nel(timq) ];
 		s  = sphi();
 
 		/*

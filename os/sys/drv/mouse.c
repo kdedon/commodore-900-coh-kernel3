@@ -137,7 +137,7 @@ static int  msprobe();
  */
 CON mscon ={
 	DFCHR|DFPOL,			/* Flags */
-	7,				/* Major index */
+	4,				/* Major index */
 	msopen,				/* Open */
 	msclose,			/* Close */
 	nonedev,			/* Block */

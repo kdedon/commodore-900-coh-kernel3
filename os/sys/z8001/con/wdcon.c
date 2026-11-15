@@ -65,17 +65,14 @@ extern	CON	mscon[];		/* HR FN#7 Amiga mouse (/dev/mouse) */
  * kept in the kernel (sys/coh/printf.c) and /etc/load puts it on the console it
  * installs here, which is how a machine with a screen gets to see it.
  *
- * Slot 7 = mscon, the HR mouse (sys/drv/mouse.c), which is the major the
- * original HR driver used (../hr/src/driver/hr.c MAJOR 7) so that vendored
- * source needs no renumbering.  It is resident rather than loadable because it
- * samples its ports from a 100 Hz timeout(), and a timeout reaches neither the
- * text nor the data of a driver living in the transient driver window.
+ * Slot 4 = mscon, the HR mouse (sys/drv/mouse.c).  Slot 7 stays free for the
+ * loadable HR window driver /drv/hr, whose binary names major 7.
  *
  * Slot 11 is reserved for /drv/hostfs, the loadable block device served by a
  * host program through a physical-memory mailbox (sys/drv/hostfs.c). */
 DRV drvl[16] ={
 	{nlcon},	{ctcon},	{wdcon},	{lpcon},
-	{NULL},		{alcon},	{NULL},		{MSDRV},
+	{MSDRV},	{alcon},	{NULL},		{NULL},
 	{NULL},		{PTYDRV},	{NULL},		{NULL},
 	{NULL},		{NULL},		{NULL},		{NULL},
 };

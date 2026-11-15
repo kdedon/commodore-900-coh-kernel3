@@ -393,7 +393,7 @@ char *envp[];		/* Environments for new process */
 	}
 
 	/* Calculate stack size and allocate it */
-	chrsz = roundu(chrsz, sizeof(int));
+	chrsz = roundu((unsigned long)chrsz, sizeof(int));
 	stksz = sizeof(int)		/* argc */
 		+ sizeof(char **)	/* argv */
 		+ sizeof(char **)	/* envp */
