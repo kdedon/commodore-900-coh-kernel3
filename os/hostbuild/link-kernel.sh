@@ -14,7 +14,7 @@ OS=$(cd "$HERE/.." && pwd)
 VERSION=$(sh "$HERE/version.sh") || exit 1		# single source of the release string (also feeds /etc/motd)
 CC0="$TCB/z8001/cc0-z8001"; CC1="$TCB/z8001/cc1-z8001"
 CC2="$TCB/z8001/cc2-z8001"; AS="$TCB/as-z8001"; LD="$TCB/ld-z8001"
-VAR="${CCZ_VAR:-800000020800}"
+VAR="${CCZ_VAR:-800000020840}"	# VREADONLY, and K&R only (-VKR)
 . "$HERE/provenance.sh"
 
 # Build private, publish by atomic rename (drivers and image build against live kernel.out).

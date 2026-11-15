@@ -16,7 +16,7 @@ OS=$(cd "$HERE/.." && pwd)
 . "$OS/hostbuild/toolchain.sh"	# sets $TC: the Z8001 toolchain checkout
 CC0="$TCB/z8001/cc0-z8001"; CC1="$TCB/z8001/cc1-z8001"
 CC2="$TCB/z8001/cc2-z8001"; LD="$TCB/ld-z8001"; AS="$TCB/as-z8001"
-VAR="${CCZ_VAR:-800000020800}"
+VAR="${CCZ_VAR:-800000020840}"	# VREADONLY, and K&R only (-VKR)
 KSYM="$HERE/kobj/kernel.out"
 OBJ="$HERE/build/drvobj"; OUT="$HERE/build/drv"
 LOG="$HERE/logs/drivers.log"; mkdir -p "$HERE/logs" "$OBJ" "$OUT"; : > "$LOG"
