@@ -32,16 +32,10 @@
 #include <signal.h>
 #include <romconf.h>
 
-#define	NMINOR	2		/* Number of serial ports: the on-board
-					 * SCC U74 pair (tty50/51).  The 4
-					 * expansion-card ports (bases 0x300+)
-					 * are dropped from the bring-up kernel
-					 * for the ROM 70,656-byte load ceiling
-					 * (each TTY is ~425 B of PRVD);
-					 * restore with the full config. */
-#define	NSCC	1		/* Number of actual SCC devices (U74
-					 * only in the bring-up kernel; see
-					 * NMINOR) */
+#define	NMINOR	6		/* U74 (tty50/51), then the lo-res
+					 * card's U31 and U36 (tty52-55) */
+#define	NBOARD	2		/* lines on U74, always fitted */
+#define	NSCC	3		/* Number of actual SCC devices */
 #define	MODEM_CTL 0x80		/* Mask in minor device for modem control */
 #define	VECTOR	0x10		/* Base vector number */
 #define	endof(x)	(&x[sizeof(x)/sizeof(x[0])])
@@ -50,6 +44,7 @@
 #define	BAUD(x,y) (int)((x)/((y)*32L))-2L  /* calc counter value */
 
 extern struct romconf romconf;
+extern int lrcard;
 
 /*
  * Functions.
@@ -187,10 +182,16 @@ CON alcon ={
  * NOTE: These entries must be in the SAME order as the ports are within
  * the SCC chip in order for the alindex() macro to work correctly !!
  */
-TTY	altty[NMINOR] = {
+TTY	altty[NBOARD] = {
 	{ {0}, {0}, 0x100, alstart, alparam, B9600, B9600 },
 	{ {0}, {0}, 0x120, alstart, alparam, B9600, B9600 }
 };
+
+/*
+ * Every line by minor number.  The card's lines are allocated only when
+ * the card is fitted; the rest stay NULL and their opens fail.
+ */
+TTY	*altp[NMINOR] = { &altty[0], &altty[1] };
 
 /*
  * Baud rate table.
@@ -282,6 +283,17 @@ alload()
 	register unsigned int vec;
 
 
+	if (lrcard &&
+	    (tp = (TTY *)kalloc((NMINOR-NBOARD) * sizeof(TTY))) != NULL)
+		for (i = NBOARD; i < NMINOR; i++, tp++) {
+			b = i - NBOARD;
+			tp->t_ddp = (char *)(long)(0x300 | (b&1)<<5 | (b&2)<<6);
+			tp->t_start = alstart;
+			tp->t_param = alparam;
+			tp->t_dispeed = tp->t_dospeed = B9600;
+			altp[i] = tp;
+		}
+
 	for (i = VECTOR; i < (VECTOR+NSCC*16); i+=2)
 		clrivec(i);
 
@@ -295,8 +307,8 @@ alload()
 	alinit[5].val = albaud[DEFBAUD] & 0xff; /* Default baudrate low */
 	alinit[6].val = albaud[DEFBAUD] >> 8;  /* Default baudrate high */
 	al_ercnt = 0;			/* reset count */
-	for (tp = &altty[0], vec = VECTOR; tp < &altty[NMINOR]; tp += 2) {
-		b = albase(tp);
+	for (i = 0, vec = VECTOR; i < NMINOR && altp[i] != NULL; i += 2) {
+		b = albase(altp[i]);
 		alwait(b+RR1, ALLSENT);	/* the console may be sending */
 		outb(b+WR9, RESET|VIS);	/* reset chip */
 		outb(b+WR2, vec);	/* set chip's base vector */
@@ -310,8 +322,8 @@ alload()
 		setivec(vec+14, alSCintr);
 		vec += 16;
 	}
-	for (tp = &altty[0]; tp < &altty[NMINOR]; tp++) {
-		b = albase(tp);
+	for (i = 0; i < NMINOR && altp[i] != NULL; i++) {
+		b = albase(altp[i]);
 		for (p = &alinit[0]; p < endof(alinit); p++)
 			outb(b+(p->port), p->val);
 	}
@@ -336,11 +348,10 @@ int mode;
 	register int m;
 
 	m = minor(dev)&~MODEM_CTL;
-	if (m >= NMINOR) {
+	if (m >= NMINOR || (tp = altp[m]) == NULL) {
 		u.u_error = ENXIO;
 		return;
 	}
-	tp = &altty[m];
 	if ((tp->t_flags&T_EXCL)!=0 && super()==0) {
 		u.u_error = ENODEV;
 		return;
@@ -410,7 +421,7 @@ int mode;
 	register int b;
 
 	s = sphi();
-	tp = &altty[minor(dev)&~MODEM_CTL];
+	tp = altp[minor(dev)&~MODEM_CTL];
 	if (--tp->t_open == 0) {
 		ttclose(tp);
 		b = albase(tp);
@@ -429,14 +440,14 @@ alread(dev, iop)
 dev_t dev;
 IO *iop;
 {
-	ttread(&altty[minor(dev)&~MODEM_CTL], iop, SFCW);
+	ttread(altp[minor(dev)&~MODEM_CTL], iop, SFCW);
 }
 
 alwrite(dev, iop)
 dev_t dev;
 IO *iop;
 {
-	ttwrite(&altty[minor(dev)&~MODEM_CTL], iop, SFCW);
+	ttwrite(altp[minor(dev)&~MODEM_CTL], iop, SFCW);
 }
 
 /*
@@ -450,7 +461,7 @@ dev_t dev;
 int ev;
 int msec;
 {
-	return ttpoll(&altty[minor(dev)&~MODEM_CTL], ev, msec);
+	return ttpoll(altp[minor(dev)&~MODEM_CTL], ev, msec);
 }
 
 alioctl(dev, com, vec)
@@ -460,7 +471,7 @@ struct sgttyb *vec;
 	register int s;
 
 	s = sphi();
-	ttioctl(&altty[minor(dev)&~MODEM_CTL], com, vec);
+	ttioctl(altp[minor(dev)&~MODEM_CTL], com, vec);
 	spl(s);
 }
 
@@ -564,7 +575,7 @@ alSCintr(id)
 	register int b;
 	register int s;
 
-	tp = &altty[alindex(id)];
+	tp = altp[alindex(id)];
 	b = albase(tp);
 	ALCOUNT(alc_sc, alindex(id));
 	s = sphi();
@@ -592,7 +603,7 @@ alESintr(id)
 	register int what;
 	register int s;
 
-	tp = &altty[alindex(id)];
+	tp = altp[alindex(id)];
 	b = albase(tp);
 	ALCOUNT(alc_es, alindex(id));
 	s = sphi();
@@ -623,7 +634,7 @@ alRxintr(id)
 	register int b;
 	register int s;
 
-	tp = &altty[alindex(id)];
+	tp = altp[alindex(id)];
 	b = albase(tp);
 	ALCOUNT(alc_rx, alindex(id));
 /*	s = sphi();				*/
@@ -648,7 +659,7 @@ alTxintr(id)
 	register int b;
 	register int s;
 
-	tp = &altty[alindex(id)];
+	tp = altp[alindex(id)];
 	b = albase(tp);
 	ALCOUNT(alc_tx, alindex(id));
 	s = sphi();

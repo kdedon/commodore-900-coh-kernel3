@@ -70,6 +70,7 @@ static	int	nviskip;	/* a no-progress step trap was retried */
  */
 int	hrmode = 2;			/* 1024x800 mono, 1 bit per pixel */
 int	hrconf = -1;			/* raw 404H byte; -1 = no board */
+int	lrcard;				/* lo-res card's text RAM answered */
 
 /*
  * Rasters on a mono board.  The 1024x1024 board reads 2 at 404H like the

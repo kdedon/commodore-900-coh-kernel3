@@ -1352,6 +1352,9 @@ _idle_:
 / answered vprobe cannot also be absent, so a zero here is a read side that is
 / not driven, and the probe stands.
 vidsel:
+	ld	r0, $0x3700		/ lo-res text framebuffer 0x370000 >> 8
+	call	vprobe
+	ld	lrcard_, r0		/ for al.c's ports on the same card
 	ld	r0, $0x3E00		/ hi-res framebuffer 0x3E0000 >> 8
 	call	vprobe
 	jr	eq, 1f			/ absent: try the text card
@@ -1372,8 +1375,7 @@ vidsel:
 2:	ld	r0, $driv_hr-icode
 	ld	icarg2_, r0		/ patch argv[2] offset -> /drv/hrtty
 	ret
-1:	ld	r0, $0x3700		/ lo-res text framebuffer 0x370000 >> 8
-	call	vprobe
+1:	test	lrcard_
 	jr	eq, 3f			/ absent: try the ID-byte cards
 	ld	r0, $driv_lr-icode
 	ld	icarg2_, r0		/ patch argv[2] offset -> /drv/lrtty
