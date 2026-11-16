@@ -275,11 +275,12 @@ register TTY *tp;
 	}
 	busy = 1;
 	for (;;) {
-		if ((n = ttoutn(tp, b, sizeof(b))) == 0) {
+		if ((tp->t_flags & T_STOP) != 0 ||
+		    (n = ttoutn(tp, b, sizeof(b))) == 0) {
 #ifdef HRC
 			/* Output queued while the bitmap was drawn. */
 			lcsync();
-			if (tp->t_oq.cq_cc != 0)
+			if (tp->t_oq.cq_cc != 0 && (tp->t_flags & T_STOP) == 0)
 				continue;
 #endif
 			break;

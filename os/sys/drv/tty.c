@@ -1014,6 +1014,25 @@ register int c;
 		goto ttin_ret;
 	}
 
+	if (ISIXON) {
+		if (ISSTOP) {
+			s = sphi();
+			tp->t_flags |= T_STOP;
+			spl(s);
+			goto ttin_ret;
+		}
+		if (ISSTART) {
+			s = sphi();
+			/* a pty waiting for its master stays stopped */
+			if ((tp->t_flags & T_HOPEN) == 0)
+				tp->t_flags &= ~T_STOP;
+			tp->t_xflags &= ~TX_OSTOP;
+			spl(s);
+			ttstart(tp);
+			goto ttin_ret;
+		}
+	}
+
 	if (tp->t_flags & T_ISTOP)
 		goto ttin_ret;
 
