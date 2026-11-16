@@ -417,6 +417,8 @@ slceil0()
  */
 segload()
 {
+	register int s;
+
 	/* Kernel processes have no user segment map to load. */
 	if ((SELF->p_flags & PFKERN) != 0)
 		return;
@@ -425,10 +427,15 @@ segload()
 	 * segment of this process is moved, resized, swapped or replaced.
 	 * Whatever does that sets PFSPROTO (vremap() for every user of a
 	 * moved segment); rebuild only then, since this runs with interrupts
-	 * masked on every switch.
+	 * masked on every switch.  The rebuild takes 3 ms at 6 MHz and only
+	 * this process's own u-area and segments are read and written, which
+	 * no interrupt handler touches, so it runs with interrupts on.
 	 */
-	if ((SELF->p_flags & PFSPROTO) != 0)
+	if ((SELF->p_flags & PFSPROTO) != 0) {
+		s = splo();
 		sproto();
+		spl(s);
+	}
 	loadmmu(u.u_sproto.mp_nseg, &u.u_sproto.mp_hsegs[0]);
 }
 

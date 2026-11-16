@@ -314,18 +314,41 @@ htstart(tp)
 register TTY *tp;
 {
 	register int c;
+	register int s;
+	static char busy;
+
 	if (hrsusp != 0) {
 		while (ttout(tp) >= 0)
 			;
 		return;
 	}
-	cursor();
-	while(( c=ttout(tp)) >= 0) {
-		rico(c);
-		if((tp->t_flags&T_STOP) != 0)
-			break;
+	/*
+	 * A scroll moves up to 100K of bitmap, so drawing runs with interrupts
+	 * on, even when the caller had them off.  A call made while a drawing
+	 * is under way leaves its characters to that drawing's loop.
+	 */
+	s = sphi();
+	if (busy) {
+		spl(s);
+		return;
 	}
-	cursor();
+	busy = 1;
+	do {
+		splo();
+		cursor();
+		for (;;) {
+			sphi();
+			if ((tp->t_flags&T_STOP) != 0 || (c = ttout(tp)) < 0)
+				break;
+			splo();
+			rico(c);
+		}
+		splo();
+		cursor();
+		sphi();
+	} while ((tp->t_flags&T_STOP) == 0 && tp->t_oq.cq_cc != 0);
+	busy = 0;
+	spl(s);
 }
 
 

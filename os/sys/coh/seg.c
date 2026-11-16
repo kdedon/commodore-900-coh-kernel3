@@ -699,8 +699,8 @@ fsize_t  n;
 		bp->b_bno   = d;
 		bp->b_paddr = p;
 		bp->b_count = nb;
-		s = sphi();
 		dblock(swapdev, bp);
+		s = sphi();
 		while ((bp->b_flag&BFNTP) != 0)
 			sleep((char *)bp, CVBLKIO, IVBLKIO, SVBLKIO);
 		spl(s);

@@ -198,7 +198,14 @@ dev_t dev;
 	s = sphi();
 	u = inb(PCDATA)&0x04;		/* Keyup/Keydown */
 	c = inb(PADATA)&~0x80;
-	spl(s);
+	/*
+	 * The echo can take a whole scroll, so the rest runs with interrupts
+	 * on.  Until the CIO's interrupt is cleared it holds off the SCC and
+	 * the disk below it in the chain; the next key waits for the strobe
+	 * in kbintend().
+	 */
+	clearint();
+	splo();
 #if 0
 	printf("ss=%d, Key %d, %s\n", kbsstate, c, u ? "up" : "down");
 #endif

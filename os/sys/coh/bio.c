@@ -205,12 +205,14 @@ register int f;
 		}
 		bp->b_req = BREAD;
 		bp->b_count = BSIZE;
-		s = sphi();
+		/*
+		 * Only the test and the sleep need interrupts off; the
+		 * driver masks its own queue.
+		 */
 		dblock(dev, bp);
-		if (f == 0) {
-			spl(s);
+		if (f == 0)
 			return (NULL);
-		}
+		s = sphi();
 		while ((bp->b_flag&BFNTP) != 0)
 			sleep((char *)bp, CVBLKIO, IVBLKIO, SVBLKIO);
 		spl(s);
@@ -334,12 +336,10 @@ register BUF *bp;
 	bp->b_flag |= BFNTP;
 	bp->b_req = BWRITE;
 	bp->b_count = BSIZE;
-	s = sphi();
 	dblock(bp->b_dev, bp);
-	if (f == 0) {
-		spl(s);
+	if (f == 0)
 		return;
-	}
+	s = sphi();
 	while ((bp->b_flag&BFNTP) != 0)
 		sleep((char *)bp, CVBLKIO, IVBLKIO, SVBLKIO);
 	spl(s);
@@ -539,8 +539,8 @@ dev_t dev;
 		bp->b_faddr = ptov( bp->b_paddr, (fsize_t) bp->b_count );
 		sp->s_lrefc++;
 	}
-	s = sphi();
 	dblock(dev, bp);
+	s = sphi();
 	while ((bp->b_flag&BFNTP) != 0)
 		sleep((char *)bp, CVBLKIO, IVBLKIO, SVBLKIO);
 	spl(s);
