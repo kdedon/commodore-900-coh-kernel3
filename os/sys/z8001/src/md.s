@@ -645,6 +645,7 @@ vint:
 	bit	SS|44(spo), $SBIT	/ Retuurning to kernel process?
 	JR	ne, 1f			/ Then don't call stand
 0:
+	ei	VI			/ Unmasked, as after a trap
 	call	stand_			/ Low-priority timers, etc.
 
 1:

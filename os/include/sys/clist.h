@@ -32,6 +32,7 @@ typedef struct cqueue {
 #ifdef KERNEL
 extern	int	cltwant;		/* A wanted flag */
 extern	cmap_t	cltfree;		/* Character free list */
+extern	int	cltnfree;		/* Clists on it */
 
 #endif
 

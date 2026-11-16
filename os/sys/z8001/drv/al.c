@@ -41,7 +41,7 @@
 #define	endof(x)	(&x[sizeof(x)/sizeof(x[0])])
 #define	alindex(x)	(((x)-VECTOR)>>3)	/* index in tty struct */
 
-#define	BAUD(x,y) (int)((x)/((y)*32L))-2L  /* calc counter value */
+#define	BAUD(x,y) (int)(((x)+(y)*16L)/((y)*32L))-2L  /* nearest counter value */
 
 extern struct romconf romconf;
 extern int lrcard;
@@ -200,7 +200,7 @@ TTY	*altp[NMINOR] = { &altty[0], &altty[1] };
  * to something sendable to the chip (for the counter)
  * by the load routine.
  */
-int albaud[] ={
+unsigned albaud[] ={
 	0,				/* 0 */
 	50,				/* 50 */
 	75,				/* 75 */
@@ -220,7 +220,7 @@ int albaud[] ={
 	9600,				/* 9600 */
 	19200,				/* 19200 */
 	0,				/* EXTA */
-	0				/* EXTB */
+	38400				/* EXTB */
 };
 
 struct	al_init	{

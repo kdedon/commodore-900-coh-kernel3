@@ -21,6 +21,8 @@
 #define	OHILIM	128		/* Output buffer hi water mark */
 #define	OLOLIM	40		/* Output buffer lo water mark */
 #define	IHILIM	512		/* Input buffer hi water mark */
+#define	IRHILIM	4096		/* Same in raw/cbreak: a whole escaped frame */
+#define	IRRESV	16		/* Clists kept free for other queues past IHILIM */
 #define	ILOLIM	40		/* Input buffer lo water mark */
 #define	ITSLIM	(IHILIM-(IHILIM/4))	/* Input buffer tandem stop mark */
 #define	ESC	'\\'		/* Some characters */

@@ -32,6 +32,8 @@
 #include <clist.h>
 #include <sched.h>
 
+int	cltnfree;			/* Clists on the free list */
+
 /*
  * Initialise character list queues.
  */
@@ -53,6 +55,7 @@ cltinit()
 		lm = cm;
 	}
 	cltfree = lm;
+	cltnfree = NCLIST;
 	crest(om);
 	spl(s);
 }
@@ -87,6 +90,7 @@ register CQUEUE *cqp;
 		crest(om);
 		cqp->cq_op = np;
 		cltfree = op;
+		cltnfree++;
 		if (np == 0) {
 			cqp->cq_ip = 0;
 			cqp->cq_ix = 0;
@@ -124,6 +128,7 @@ register CQUEUE *cqp;
 		cltfree = cvirt(ip)->cl_fp;
 		cvirt(ip)->cl_fp = 0;
 		crest(om);
+		cltnfree--;
 		if ((np=cqp->cq_ip) == 0)
 			cqp->cq_op = ip;
 		else {
@@ -186,6 +191,7 @@ int n;
 		cvirt(op)->cl_fp = cltfree;
 		crest(om);
 		cltfree = op;
+		cltnfree++;
 		if (cqp->cq_op == 0) {
 			cqp->cq_ip = 0;
 			cqp->cq_ix = 0;
@@ -225,6 +231,7 @@ int n;
 			cltfree = cvirt(ip)->cl_fp;
 			cvirt(ip)->cl_fp = 0;
 			crest(om);
+			cltnfree--;
 			if ((np = cqp->cq_ip) == 0)
 				cqp->cq_op = ip;
 			else {

@@ -23,7 +23,7 @@
  */
 #define NDRV	20			/* Number of major device entries */
 #define NBUF	40			/* Size of buffer cache */
-#define	NCLIST	32			/* Number of clists (NCPCL/256 per) */
+#define	NCLIST	64			/* Number of clists (NCPCL/256 per) */
 #define NUFILE	20			/* Number of user open files */
 #define NINODE	100			/* Size of in core inode table */
 /* Nothing in the current kernel expands this: every file that reads ALLSIZE

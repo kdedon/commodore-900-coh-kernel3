@@ -1145,7 +1145,8 @@ register int c;
 			ttstart(tp);
 		}
 	}
-	if ((n=tp->t_iq.cq_cc)>=IHILIM) {
+	if ((n=tp->t_iq.cq_cc) >= IHILIM &&
+	    (!ISBBYB || n >= IRHILIM || cltnfree <= IRRESV)) {
 		s = sphi();
 		tp->t_flags |= T_ISTOP;
 		spl(s);

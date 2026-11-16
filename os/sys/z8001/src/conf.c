@@ -17,7 +17,7 @@
 int	NBUF	= 40;		/* buffer cache (== 0.7.3 param.h NBUF) */
 int	NHASH	= 37;		/* buffer hash headers */
 int	NINODE	= 100;		/* in-core inode table (== 0.7.3) */
-int	NCLIST	= 32;		/* character lists (== 0.7.3) */
+int	NCLIST	= 64;		/* character lists */
 /*
  * The kalloc arena.  ONE pool serves the whole kernel: buffer headers (NBUF
  * x sizeof(BUF)), the pty pool (NUPTY x sizeof(PTY)), and then, per live

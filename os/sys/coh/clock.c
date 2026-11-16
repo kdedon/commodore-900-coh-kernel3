@@ -229,11 +229,13 @@ stand()
 	/*
 	 * Update the clock.
 	 */
+	s = sphi();
 	while (timer.t_tick >= HZ) {
 		timer.t_time++;
 		timer.t_tick -= HZ;
 		outflag = 1;
 	}
+	spl(s);
 
 	/*
 	 * Check expiration of quantum.
