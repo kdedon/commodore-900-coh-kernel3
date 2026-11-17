@@ -13,11 +13,10 @@ Building
 
     make deps                 fetch the toolchain and kboot inputs
     make                      build the kernel
-    make drivers              build the loadable console drivers
+    make drivers              build the loadable console and hostfs drivers
     make kernel-dist          create the kernel package
     make kernel-headers-dist  create the standalone headers package
     make check-stamps         verify kernel/driver link IDs
-    make check-shared         compare shared headers with the toolchain
     make clean
     make help
 
@@ -29,8 +28,21 @@ The compiler that produced a kernel is recorded in
 `os/hostbuild/kobj/kernel.stamp` and reported by `make check-stamps`. `DEPS`
 takes the toolchain's latest release; `make deps DEP=toolchain` fetches it.
 
+The kernel must be booted by kboot: it is larger than the ROM loader can read.
+
 This repository builds kernel artifacts only. Disk images and userland are
 built in their respective repositories.
+
+Hardware
+--------
+
+The boot picks a console driver for the display card it finds:
+
+- LR (lo-res) card: `lrtty`, plus its four serial lines as tty52-55.
+- HR card, 1024x800 or 1024x1024 mono: `hrtty`.
+- HR card in colour, 640x400: `hrctty`.
+- LC card (8563): `lctty`, with bitmap graphics on `/dev/lcvdc`.
+- No card: the serial console (`notty`).
 
 Two hard disks
 --------------
